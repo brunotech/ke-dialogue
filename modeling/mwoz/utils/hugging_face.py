@@ -45,10 +45,8 @@ def add_token_bAbI(model,tokenizer,task=5):
         entity_file = open("data/entity_babi_5.txt")
     elif (task==6):
         entity_file = open("data/entity_DSTC2.txt")
-    temp = []
-    for e in entity_file:
-        temp.append(e.replace("\n",""))
-    orig_num_tokens = len(tokenizer) 
+    temp = [e.replace("\n","") for e in entity_file]
+    orig_num_tokens = len(tokenizer)
     # print(len(tokenizer))
     num_added_tokens = tokenizer.add_special_tokens({'additional_special_tokens': tuple(temp)} ) # doesn't add if they are already there
     if num_added_tokens > 0:
@@ -63,8 +61,7 @@ def build_input_from_segments(args, history, reply, graph, tokenizer, lm_labels=
     history = history[-args.max_history:]
     sequence = [[bos]] + history + [reply + ([eos] if with_eos else [])]
     sequence = [sequence[0]] + [[speaker2 if (len(sequence)-i) % 2 else speaker1] + s for i, s in enumerate(sequence[1:])]
-    instance = {}
-    instance["input_ids"] = list(chain(*sequence))
+    instance = {"input_ids": list(chain(*sequence))}
     instance["token_type_ids"] = [speaker2 if i % 2 else speaker1 for i, s in enumerate(sequence) for _ in s]
     instance["lm_labels"] = [-100] * len(instance["input_ids"])
 
@@ -107,14 +104,14 @@ def get_loader(args,data_raw, tokenizer):
     datasets = {"train": [], "valid": [], "test": []}
     # domains, particularly for MWOZ
     domains = {"train": [], "valid": [], "test": []} 
-    
+
     for dataset_name, data in data_raw.items():
         for conv in tqdm(data,total=len(data)):
             for sample in conv['dialogue']: 
-                instance = build_input_from_segments(args,sample['history'], sample["response"], sample["graph"] if args.dataset == "DIALKG" else conv, tokenizer, lm_labels=True, with_eos=True, valid=dataset_name)   
+                instance = build_input_from_segments(args,sample['history'], sample["response"], sample["graph"] if args.dataset == "DIALKG" else conv, tokenizer, lm_labels=True, with_eos=True, valid=dataset_name)
                 # for input_name, input_array in instance.items():
                 datasets[dataset_name].append(instance)
-                if args.dataset == "MWOZ" or args.dataset == "MWOZ_SINGLE":
+                if args.dataset in ["MWOZ", "MWOZ_SINGLE"]:
                     domains[dataset_name].append(conv['domain'])
 
     print("Build train and validation dataloaders")
@@ -128,13 +125,13 @@ def get_loader(args,data_raw, tokenizer):
         train_loader = DataLoader(train_dataset, sampler=ImbalancedDatasetSampler(train_dataset), batch_size=args.train_batch_size, collate_fn=collate_fn)
     else:
         train_loader = DataLoader(train_dataset, batch_size=args.train_batch_size, shuffle=True,collate_fn=collate_fn)
-    
+
     valid_loader = DataLoader(valid_dataset, batch_size=args.valid_batch_size, shuffle=False,collate_fn=collate_fn)
     test_loader = DataLoader(test_dataset, batch_size=args.valid_batch_size, shuffle=False,collate_fn=collate_fn)
 
-    print("Train: {}".format(len(train_dataset)))
-    print("Valid: {}".format(len(valid_loader)))
-    print("Test: {}".format(len(test_loader)))
+    print(f"Train: {len(train_dataset)}")
+    print(f"Valid: {len(valid_loader)}")
+    print(f"Test: {len(test_loader)}")
     return train_loader, valid_loader, test_loader
 
 
@@ -157,17 +154,16 @@ class DatasetTrain(Dataset):
 
     def __getitem__(self, index):
         """Returns one data pair (source and target)."""
-        item = self.data[index]
-        return item
+        return self.data[index]
         
     def __len__(self):
         return self.dataset_len
 
 def collate_fn(data):
     padding = data[0]["padding_token"]
-    ## just load node and adj if needed 
-    net = True if(data[0]["input_graph_ids"]) else False
-    adj_net = True if(data[0]["input_graph_networks"]) else False
+    ## just load node and adj if needed
+    net = bool(data[0]["input_graph_ids"])
+    adj_net = bool(data[0]["input_graph_networks"])
 
     max_l = max(len(x["input_ids"]) for x in data)
     padded_dataset = {n:[] for n in MODEL_INPUTS}
@@ -177,14 +173,15 @@ def collate_fn(data):
         padded_dataset["input_ids"].append(x["input_ids"]+ [padding]*(max_l-len(x["input_ids"])))
 
     ## nodes embedding
-    if(net):
+    if net:
         max_r = max(len(mat["input_graph_ids"]) for mat in data)
         max_c = max(len(col) for mat in data for col in mat["input_graph_ids"])
         matrixes = []
         for mat in data:
-            temp = []
-            for clmn in mat["input_graph_ids"]:
-                temp.append(clmn + [padding] * (max_c - len(clmn)))
+            temp = [
+                clmn + [padding] * (max_c - len(clmn))
+                for clmn in mat["input_graph_ids"]
+            ]
             temp += [[padding] * max_c] * (max_r - len(mat["input_graph_ids"]))
             matrixes.append(temp)
         padded_dataset["input_graph_ids"] = matrixes
@@ -272,23 +269,21 @@ def average_distributed_scalar(scalar, args):
 
 def make_logdir(args,model_name: str):
     """Create unique path to save results and checkpoints, e.g. runs/Sep22_19-45-59_gpu-7_gpt2"""
-    # Code copied from ignite repo
-    # current_time = datetime.now().strftime('%b%d_%H-%M-%S')
-    # logdir = os.path.join('runs', current_time + '_' + socket.gethostname() + '_' + model_name)
-    logdir = os.path.join('runs', f'{args.dataset}_{model_name}_graph_{args.graph}_adj_{args.adj_graph}_edge_{args.edge_list}_unilm_{args.unilm}_flattenKB_{args.flatten_KB}_historyL_{args.max_history}_lr_{args.lr}_epoch_{args.n_epochs}_weighttie_{args.weight_tie}_kbpercentage_{args.kbpercentage}_layer_{args.layers}_balancesampler_{args.balance_sampler}_upsampler_{args.up_sampler}') #  current_time + '_' + socket.gethostname() + '_' + model_name)
-    
-    return logdir
+    return os.path.join(
+        'runs',
+        f'{args.dataset}_{model_name}_graph_{args.graph}_adj_{args.adj_graph}_edge_{args.edge_list}_unilm_{args.unilm}_flattenKB_{args.flatten_KB}_historyL_{args.max_history}_lr_{args.lr}_epoch_{args.n_epochs}_weighttie_{args.weight_tie}_kbpercentage_{args.kbpercentage}_layer_{args.layers}_balancesampler_{args.balance_sampler}_upsampler_{args.up_sampler}',
+    )
 
 
 def load_modelDGPT(model, checkpoint, args, verbose=False):
     if checkpoint is None or checkpoint == "None":
         if verbose:
-            print('No checkpoint provided for %s!' % model._get_name())
+            print(f'No checkpoint provided for {model._get_name()}!')
     else:
         if not os.path.exists(checkpoint):
-            raise ValueError('checkpoint %s not exist' % checkpoint)
+            raise ValueError(f'checkpoint {checkpoint} not exist')
         if verbose:
-            print('Loading finetuned model from %s' % checkpoint)
+            print(f'Loading finetuned model from {checkpoint}')
         model_state_dict = torch.load(checkpoint)
 
         model_state_dict = fix_state_dict_namespace(model_state_dict)
@@ -388,7 +383,12 @@ def load_model(args, load=False):
         args.model_path = f'data/dialoGPT/{args.model_size}/'
         config = GPT2Config.from_json_file(os.path.join(args.model_path, 'config.json'))
         tokenizer = GPT2Tokenizer.from_pretrained(args.model_path)
-        model = load_modelDGPT(DIALOGGPT2LMHeadModel(config), args.model_path+f"{args.model_size}_ft.pkl", args, verbose=True)
+        model = load_modelDGPT(
+            DIALOGGPT2LMHeadModel(config),
+            f"{args.model_path}{args.model_size}_ft.pkl",
+            args,
+            verbose=True,
+        )
         args.max_seq_len = 1024
 
     model.to(args.device)
@@ -417,7 +417,7 @@ def get_bAbI_vocab():
                         if("i'm on it" not in syst and "api_call" not in syst and "ok let me look into some options for you" not in syst):
                             conversation.append({"spk":"SYS","text":syst})
         return data
-    
+
     entity_file = open("data/dialog-bAbI-tasks/dialog-babi-kb-all.txt")
     vocab = set()
     for line in entity_file: 
@@ -435,8 +435,7 @@ def get_bAbI_vocab():
         for turns in conv:
             for token in turns['text'].split():
                 vocab.add(token)
-    vocab = list(vocab)
-    vocab.sort()
+    vocab = sorted(vocab)
     vocab = {tok:int(idx) for idx, tok in enumerate(vocab)}
     return vocab
 

@@ -46,18 +46,15 @@ train_dialogue_metas = pickle.load(open('./opendialkg/dialogkg_train_meta.pt', '
 len_subgraphs = list(map(lambda x: len(x[3][2]), train_dialogue_metas))
 train_meta_df = pd.DataFrame({'graph_len':len_subgraphs, 'meta':train_dialogue_metas})
 
-# Result Buffer
-used_count_records = []
-db_count_records = []
 generated_dialogues = []
 
 # Reset Count
 execute_reset_count(neo4j_driver, count=None, suffix=random_seed)
 
-# Insert initial count to df_count_records and used_entities_counter
-used_count_records.append({})
-db_count_records.append(execute_retrieve_node_count(neo4j_driver, suffix=random_seed))
-
+used_count_records = [{}]
+db_count_records = [
+    execute_retrieve_node_count(neo4j_driver, suffix=random_seed)
+]
 # Iterate
 print('Starting generation...')
 is_finish = False
@@ -69,7 +66,7 @@ while not is_finish:
     count_fulfilled = 0
     count_unfulfilled = 0
     used_entities_counter = Counter()
-    
+
     train_meta_samples = train_meta_df.loc[train_meta_df['graph_len'] <= 20,:].sample(batch_size, random_state=random_seed+sum(count_fulfilled_list))
     dialogue_metas = train_meta_samples['meta'].tolist()
     for dialogue_meta in tqdm(dialogue_metas):
@@ -80,7 +77,7 @@ while not is_finish:
             break
         except:
             gen_dialogue = None
-            
+
         if gen_dialogue:
             count_fulfilled += 1
             generated_dialogues.append(gen_dialogue)
@@ -88,17 +85,17 @@ while not is_finish:
                 used_entities_counter[used_entity] += 1
         else:
             count_unfulfilled += 1
-            
+
     iteration += 1
     count_fulfilled_list.append(count_fulfilled)
     count_unfulfilled_list.append(count_unfulfilled)
     iterations.append(iteration)
-    
+
     used_count_records.append(dict(used_entities_counter))
     db_count_records.append(execute_retrieve_node_count(neo4j_driver, suffix=random_seed))
 
     print(f'Finish iteration {iteration} | Fulfilled: {count_fulfilled} | Total Fulfilled: {sum(count_fulfilled_list)}')
-    
+
     # Save every 10 iteration
     if iteration % 10 == 0:
         write_dialogue_to_file(generated_dialogues, batch_size, random_seed)

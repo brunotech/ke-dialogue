@@ -24,9 +24,9 @@ pricepat = re.compile("\d{1,3}[.]\d{1,2}")
 
 fin = open("mapping.pair","r")
 replacements = []
-for line in fin.readlines():
+for line in fin:
     tok_from, tok_to = line.replace('\n', '').split('\t')
-    replacements.append((' ' + tok_from + ' ', ' ' + tok_to + ' '))
+    replacements.append((f' {tok_from} ', f' {tok_to} '))
 
 def insertSpace(token, text):
     sidx = 0
@@ -39,10 +39,10 @@ def insertSpace(token, text):
             sidx += 1
             continue
         if text[sidx - 1] != ' ':
-            text = text[:sidx] + ' ' + text[sidx:]
+            text = f'{text[:sidx]} {text[sidx:]}'
             sidx += 1
         if sidx + len(token) < len(text) and text[sidx + len(token)] != ' ':
-            text = text[:sidx + 1] + ' ' + text[sidx + 1:]
+            text = f'{text[:sidx + 1]} {text[sidx + 1:]}'
         sidx += 1
     return text
 
@@ -61,11 +61,9 @@ def normalize(text):
     text = re.sub(r"guest house", "guesthouse", text)
     text = re.sub(r"rosas bed and breakfast", "rosa s bed and breakfast", text)
     text = re.sub(r"el shaddia guesthouse", "el shaddai", text)
-    
 
-    # normalize phone number
-    ms = re.findall('\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4,5})', text)
-    if ms:
+
+    if ms := re.findall('\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4,5})', text):
         sidx = 0
         for m in ms:
             sidx = text.find(m[0], sidx)
@@ -74,10 +72,10 @@ def normalize(text):
             eidx = text.find(m[-1], sidx) + len(m[-1])
             text = text.replace(text[sidx:eidx], ''.join(m))
 
-    # normalize postcode
-    ms = re.findall('([a-z]{1}[\. ]?[a-z]{1}[\. ]?\d{1,2}[, ]+\d{1}[\. ]?[a-z]{1}[\. ]?[a-z]{1}|[a-z]{2}\d{2}[a-z]{2})',
-                    text)
-    if ms:
+    if ms := re.findall(
+        '([a-z]{1}[\. ]?[a-z]{1}[\. ]?\d{1,2}[, ]+\d{1}[\. ]?[a-z]{1}[\. ]?[a-z]{1}|[a-z]{2}\d{2}[a-z]{2})',
+        text,
+    ):
         sidx = 0
         for m in ms:
             sidx = text.find(m, sidx)
@@ -114,7 +112,7 @@ def normalize(text):
     text = re.sub('\'\s', ' ', text)
     text = re.sub('\s\'', ' ', text)
     for fromx, tox in replacements:
-        text = ' ' + text + ' '
+        text = f' {text} '
         text = text.replace(fromx, tox)[1:-1]
 
     # remove multiple spaces
@@ -152,7 +150,7 @@ def substringSieve(string_list):
     string_list.sort(key=lambda s: len(s), reverse=True)
     out = []
     for s in string_list:
-        if not any([s in o for o in out]):
+        if all(s not in o for o in out):
             out.append(s)
     return out
 
@@ -191,29 +189,29 @@ def to_query(domain, dic, reqt):
     return q
 
 def convert_time_int_to_time(all_rows,clmn):#leaveAt_id,arriveBy_id):
-    leaveAt_id = -1
-    arriveBy_id = -1
-    if('leaveAt' in clmn):
-        leaveAt_id = clmn.index('leaveAt')
-    if('arriveBy' in clmn):
-        arriveBy_id = clmn.index('arriveBy')
-    if(leaveAt_id!= -1):
+    leaveAt_id = clmn.index('leaveAt') if ('leaveAt' in clmn) else -1
+    arriveBy_id = clmn.index('arriveBy') if ('arriveBy' in clmn) else -1
+    if (leaveAt_id!= -1):
         for i in range(len(all_rows)):
             all_rows[i] = list(all_rows[i])
             time = int(all_rows[i][leaveAt_id])
             mins=int(time%60)
-            hours=int(time/60)
-            if(len(str(hours)))==1: hours = "0"+str(hours)
-            if(len(str(mins)))==1: mins = "0"+str(mins)
+            hours = time // 60
+            if (len(str(hours)))==1:
+                hours = f"0{str(hours)}"
+            if (len(str(mins)))==1:
+                mins = f"0{mins}"
             all_rows[i][leaveAt_id] = str(hours)+str(mins)
-    if(arriveBy_id!= -1):
+    if (arriveBy_id!= -1):
         for i in range(len(all_rows)):
             all_rows[i] = list(all_rows[i])
             time = int(all_rows[i][arriveBy_id])
             mins=int(time%60)
-            hours=int(time/60)
-            if(len(str(hours)))==1: hours = "0"+str(hours)
-            if(len(str(mins)))==1: mins = "0"+str(mins)
+            hours = time // 60
+            if (len(str(hours)))==1:
+                hours = f"0{str(hours)}"
+            if (len(str(mins)))==1:
+                mins = f"0{mins}"
             all_rows[i][arriveBy_id] = str(hours)+str(mins)
     return all_rows
 
@@ -237,9 +235,12 @@ def parse_results(dic_data,semi,domain):
             if k in ["leaveAt","destination","departure","arriveBy"]:
                 book_query += f" {k} = '{normalize(t)}'"
 
-    if(domain == "hotel"):
-        if dic_data["day"]== "" or dic_data["stay"]== "" or dic_data["people"]== "":
-            return None,None
+    if (domain == "hotel") and (
+        dic_data["day"] == ""
+        or dic_data["stay"] == ""
+        or dic_data["people"] == ""
+    ):
+        return None,None
     results = None
     if(len(dic_data['booked'])>0):
         if(domain == "train" and 'trainID' in dic_data['booked'][0]):
@@ -271,10 +272,18 @@ def check_metadata(dic, state):
     return (None, None), state
 
 def get_booking_query(text):
-    domain = {"global":set(),"train":[],"attraction":[],"hotel":[],"restaurant":[],"taxi":[],
-              "police":[],"hospital":[],"generic":[]}
-    domain[text.split()[0]] = re.findall(r"'(.*?)'", text)
-    return domain
+    return {
+        "global": set(),
+        "train": [],
+        "attraction": [],
+        "hotel": [],
+        "restaurant": [],
+        "taxi": [],
+        "police": [],
+        "hospital": [],
+        "generic": [],
+        text.split()[0]: re.findall(r"'(.*?)'", text),
+    }
 
 def delexer(turns,dictionary,entity_info):
     text_delex = normalize(turns['text'])
@@ -292,17 +301,16 @@ def delexer(turns,dictionary,entity_info):
                     if("street" in val.lower()):
                         dictionary[att.lower()].append(normalize(val).replace(" street",""))
 
-    
+
     for k,v in entity_info.items():
         for val in v:
-            if(type(val)==int and str(val) in text_delex):
+            if (type(val)==int and str(val) in text_delex):
                 dictionary[k].append(str(val))
-            else:
-                if(normalize(val) in text_delex):
-                    dictionary[k].append(normalize(val))
-                elif("street" in val.lower() and normalize(val).replace(" street","") in text_delex):
-                    dictionary[k].append(normalize(val).replace(" street",""))
-                    turns['text'] = turns['text'].replace(normalize(val).replace(" street",""),normalize(val))
+            elif (normalize(val) in text_delex):
+                dictionary[k].append(normalize(val))
+            elif("street" in val.lower() and normalize(val).replace(" street","") in text_delex):
+                dictionary[k].append(normalize(val).replace(" street",""))
+                turns['text'] = turns['text'].replace(normalize(val).replace(" street",""),normalize(val))
 
 
     return text_delex
@@ -364,22 +372,24 @@ def query_TRAINID_and_filter(entity_correct_train,r_delex_dictionary):
     else:
         del entity_correct_train['destination-correct']
 
-    if "ticket" in r_delex_dictionary:
-        if entity_correct_train['price-correct'] not in r_delex_dictionary["ticket"]:
-            del entity_correct_train['price-correct']
-        else:
-            del r_delex_dictionary["ticket"][r_delex_dictionary["ticket"].index(entity_correct_train['price-correct'])]
-    else:
+    if (
+        "ticket" in r_delex_dictionary
+        and entity_correct_train['price-correct']
+        not in r_delex_dictionary["ticket"]
+        or "ticket" not in r_delex_dictionary
+    ):
         del entity_correct_train['price-correct']
-
-    if "time" in r_delex_dictionary:
-        if entity_correct_train['duration-correct'] not in r_delex_dictionary["time"]:
-            del entity_correct_train['duration-correct']
-        else:
-            del r_delex_dictionary["time"][r_delex_dictionary["time"].index(entity_correct_train['duration-correct'])]
     else:
+        del r_delex_dictionary["ticket"][r_delex_dictionary["ticket"].index(entity_correct_train['price-correct'])]
+    if (
+        "time" in r_delex_dictionary
+        and entity_correct_train['duration-correct']
+        not in r_delex_dictionary["time"]
+        or "time" not in r_delex_dictionary
+    ):
         del entity_correct_train['duration-correct']
-
+    else:
+        del r_delex_dictionary["time"][r_delex_dictionary["time"].index(entity_correct_train['duration-correct'])]
     if entity_correct_train['trainID-correct'] not in r_delex_dictionary["id"]:
         del entity_correct_train['trainID-correct']
     else:
@@ -404,16 +414,14 @@ def get_trainID_train(conv,dict_delex):
             for ids_v, v in enumerate(r_delex_dictionary["id"]):
                 if(v in conv_turn["text"]):
                     return v, ids_v
-                if(v in conv_turn["text"]):
-                    return v, ids_v
     return None, None
 
 def get_start_end_ACT(ACT):
     dic = {}
     mapper = {"one":1,"two":2,"three":3,"3-star":3,"four":4,"five":5}
     for span in ACT:
-        if(span[1]=="Stars"):
-            if(span[2] in mapper.keys()):
+        if (span[1]=="Stars"):
+            if span[2] in mapper:
                 dic[mapper[span[2]]] = [span[3],span[4]]
             else:
                 dic[span[2]] = [span[3],span[4]]
@@ -445,11 +453,8 @@ for k, dial in train.items():
             all_leaveAt_choice.append(goal['leaveAt'])
         if('arriveBy' in goal):
             all_arriveBy_choice.append(goal['arriveBy'])
-all_arriveBy_choice = list(set(all_arriveBy_choice))
-all_leaveAt_choice = list(set(all_leaveAt_choice))
-
-all_arriveBy_choice.sort()
-all_leaveAt_choice.sort()
+all_arriveBy_choice = sorted(set(all_arriveBy_choice))
+all_leaveAt_choice = sorted(set(all_leaveAt_choice))
 # print(all_leaveAt_choice)
 
 def generate_all_query(r_delex_dictionary, entity_correct_train,info):
@@ -464,22 +469,20 @@ def generate_all_query(r_delex_dictionary, entity_correct_train,info):
         name.append('arriveBy')
     clmn = [k.replace("-correct","")for k in entity_correct_train.keys()]
     lexicalized = []
-    all_combo = list(product(*contrains))
-    all_combo.sort()
-
+    all_combo = sorted(product(*contrains))
     index = np.random.choice(len(all_combo), 500).tolist()
     list_combo = [ all_combo[indx] for indx in index ]
     for combo in list_combo:
         query = {name[i_c]:c for i_c, c in enumerate(combo)}
         database.execute(to_query("train", query, clmn))
         all_rows = database.fetchall()
-        if(len(all_rows)>0):
+        if (len(all_rows)>0):
             choice = str(len(all_rows))
-            if('leaveAt' in entity_correct_train.keys()):
-                min_time = min([int(row[clmn.index("leaveAt")]) for row in all_rows])
+            if ('leaveAt' in entity_correct_train.keys()):
+                min_time = min(int(row[clmn.index("leaveAt")]) for row in all_rows)
                 all_rows = [ row for row in all_rows if int(row[clmn.index("leaveAt")])== min_time ]
-            if('arriveBy' in entity_correct_train.keys()):
-                max_time = max([int(row[clmn.index("arriveBy")]) for row in all_rows])
+            if ('arriveBy' in entity_correct_train.keys()):
+                max_time = max(int(row[clmn.index("arriveBy")]) for row in all_rows)
                 all_rows = [ row for row in all_rows if int(row[clmn.index("arriveBy")])== max_time ]
             all_rows = convert_time_int_to_time(all_rows.copy(),clmn)
 

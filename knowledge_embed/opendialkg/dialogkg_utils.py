@@ -36,43 +36,29 @@ from revertible_string import RevertibleString
 # neo4j function
 ###
 def drop_count_index(tx, suffix=None):
-    feature_name = 'count'
-    if suffix:
-        feature_name = f'count_{suffix}'
+    feature_name = f'count_{suffix}' if suffix else 'count'
     tx.run(f"DROP INDEX ON :Node({feature_name})")
 
 def create_count_index(tx, suffix=None):
-    feature_name = 'count'
-    if suffix:
-        feature_name = f'count_{suffix}'
+    feature_name = f'count_{suffix}' if suffix else 'count'
     tx.run(f"CREATE INDEX ON :Node({feature_name})")
     
 def warmup_cache(tx):
     tx.run("CALL apoc.warmup.run()")
 
 def reset_count(tx, count=None, suffix=None):
-    feature_name = 'count'
-    if suffix:
-        feature_name = f'count_{suffix}'
-        
+    feature_name = f'count_{suffix}' if suffix else 'count'
     if count:
         tx.run(f"MATCH (a:Node) SET a.{feature_name} = {count}")
     else:
         tx.run(f"MATCH (a:Node) SET a.{feature_name}  = SIZE((a)-[]-())")
 
 def decrement_count(tx, node_values, suffix=None):
-    feature_name = 'count'
-    if suffix:
-        feature_name = f'count_{suffix}'
+    feature_name = f'count_{suffix}' if suffix else 'count'
     tx.run(f"MATCH (a:Node) WHERE a.value IN {str(node_values)} SET a.{feature_name} = a.{feature_name} - 1")
     
 def run_query(tx, query):
-    result_list = []
-    for record in tx.run(query):
-        result_list.append(record)
-    
-    # Return result as list
-    return result_list
+    return list(tx.run(query))
 
 ###
 # Reader & Writer
@@ -105,31 +91,28 @@ def execute_retrieve_first(neo4j_driver, query):
             return record
 
 def execute_retrieve_node_count(neo4j_driver, suffix=None):
-    feature_name = 'count'
-    if suffix:
-        feature_name = f'count_{suffix}'
-        
+    feature_name = f'count_{suffix}' if suffix else 'count'
     with neo4j_driver.session() as session:
-        result_dict = {}
-        for record in session.run(f'MATCH (n:Node) RETURN n.value AS name, n.{feature_name} AS count'):
-            result_dict[record['name']] = record['count']
-        return result_dict
+        return {
+            record['name']: record['count']
+            for record in session.run(
+                f'MATCH (n:Node) RETURN n.value AS name, n.{feature_name} AS count'
+            )
+        }
     
 ###
 # Common function
 ###
 def get_global_entity_DIALKG():
     with open('./opendialkg/opendialkg_entities.txt') as f:
-        global_entity_list = []
-        for x in f:
-            global_entity_list.append(x.replace("\n",""))
+        global_entity_list = [x.replace("\n","") for x in f]
     return list(set(global_entity_list))
 
 def substring_sieve(string_list):
     string_list.sort(key=lambda s: len(s), reverse=True)
     out = []
     for s in string_list:
-        if not any([s in o for o in out]):
+        if all(s not in o for o in out):
             out.append(s)
     return out
 
@@ -223,25 +206,20 @@ def extract_subgraph_meta(subgraph, start_node):
     """    
     # Sort subgraph by relationship, so we can match two equivalent subgraphs later
     subgraph.sort(key=lambda sro: sro[1])
-    
+
     # Retrieve entity
     entity_set = set()
     for s, r, o in subgraph:
         entity_set.add(s)
         entity_set.add(o)
-    
-    # Generate map entity to variable & variable to entity
-    entities = list(entity_set)
-    entities.sort()
-    
+
+    entities = sorted(entity_set)
     entity_to_var = {e:i for i,e in enumerate(entities)}
-    var_to_entity = {i:e for i,e in enumerate(entities)}
-    
-    # Construct template subgraph
-    template_subgraph = []
-    for s, r, o in subgraph:
-        template_subgraph.append((entity_to_var[s], r, entity_to_var[o]))
-    
+    var_to_entity = dict(enumerate(entities))
+
+    template_subgraph = [
+        (entity_to_var[s], r, entity_to_var[o]) for s, r, o in subgraph
+    ]
     # Return result as list
     return entity_to_var, var_to_entity, template_subgraph, start_node
 
@@ -251,15 +229,10 @@ def extract_subgraph_meta(subgraph, start_node):
 def get_match_entities(text,entities, cased=False):
     match_entities = []
     for entity in entities:
-        if not cased:
-            is_entity_exist = entity.lower() in text.lower()
-        else:
-            is_entity_exist = entity in text
-            
+        is_entity_exist = entity in text if cased else entity.lower() in text.lower()
         if(is_entity_exist):
             match_entities.append(entity)
-    match_entities = substring_sieve(match_entities)
-    return match_entities
+    return substring_sieve(match_entities)
 
 def extract_dialog(dialogue, global_ent, cased=False):
     """
@@ -273,16 +246,16 @@ def extract_dialog(dialogue, global_ent, cased=False):
                - dialog_entities    list of all entities in the dialog           list[<str>]
     """  
     chat_dialogue = []
-    entity_to_chat = {}    
+    entity_to_chat = {}
     dialogue_entities = []
-    
-    for i, conv in enumerate(dialogue):
+
+    for conv in dialogue:
         match_entities = get_match_entities(conv["text"].replace("  "," "), global_ent, cased)
         dialogue_entities += match_entities
 
         text = RevertibleString(conv["text"].replace("  "," "))
         chat_dialogue.append({"speaker":conv['speaker'], "text":text})
-        
+
         for entity in match_entities:
             if entity not in entity_to_chat:
                 entity_to_chat[entity] = []
@@ -301,16 +274,13 @@ def extract_dialog(dialogue, global_ent, cased=False):
     dialogue_entities = list(filter(lambda x: x.lower()!= 'review', dialogue_entities))
     dialogue_entities = list(filter(lambda x: x.lower()!= 'check it out', dialogue_entities))
     dialogue_entities = list(filter(lambda x: x.lower()!= 'for you', dialogue_entities))
-    
-    # Remove filtered entities from entity_to_chat
-    deleted_entities = []
-    for key in entity_to_chat.keys():
-        if key not in dialogue_entities:
-            deleted_entities.append(key)
-    
+
+    deleted_entities = [
+        key for key in entity_to_chat if key not in dialogue_entities
+    ]
     for entity in deleted_entities:
          del entity_to_chat[entity]
-    
+
     # Return dialog meta
     return chat_dialogue, entity_to_chat, dialogue_entities
 
@@ -339,7 +309,7 @@ def generate_dialog_meta(dialogue, global_ent, neo4j_driver, cased=False):
         subgraph, start_node = generate_subgraph(neo4j_driver, dialogue_entities)
         subgraph_meta = extract_subgraph_meta(subgraph, start_node)
     else:
-        subgraph_meta = (dict(), dict(), list(), None)
+        subgraph_meta = {}, {}, [], None
     return chat_dialogue, entity_to_chat, dialogue_entities, subgraph_meta
 
 def generate_dataset_meta(data_path, global_ent, neo4j_driver, cased=False):
@@ -382,26 +352,22 @@ def generate_dialogue(neo4j_driver, dialogue_meta, limit=1, is_parallel=False, r
     chat_dialogue, entity_to_chat, dialogue_entities, subgraph_meta = dialogue_meta
     entity_to_var, var_to_entity, template_subgraph, subgraph_start_node = subgraph_meta
 
-    # Set count feature with suffix
-    feature_name = 'count'
-    if suffix:
-        feature_name = f'count_{suffix}'
-
+    feature_name = f'count_{suffix}' if suffix else 'count'
     # Warmup cache
     execute_warmup_cache(neo4j_driver)
-    
+
     # generate Neo4J query using the extracted graph pattern
     match_nodes = []
+    query_nodes = set()
     if is_parallel:
         f_node = subgraph_start_node # first node for parallelization
         f_rel = [] # first node relations for parallelization
-        query_nodes = set()
-        for s,r,o in template_subgraph:
-            if f'n{s}' == subgraph_start_node:
+        for s, r, o in template_subgraph:
+            if f'n{s}' == f_node:
                 f_rel.append(r)
                 match_nodes.append(f"(_)-[:{r}]->(n{o})")
                 query_nodes.update(['_',f'n{o}'])
-            elif f'n{o}' == subgraph_start_node:
+            elif f'n{o}' == f_node:
                 f_rel.append(r)
                 match_nodes.append(f"(n{s})-[:{r}]->(_)")
                 query_nodes.update([f'n{s}','_'])
@@ -424,12 +390,11 @@ def generate_dialogue(neo4j_driver, dialogue_meta, limit=1, is_parallel=False, r
             ",{{parallel:true}}, f_node) YIELD value
             RETURN value
         """
-        
+
         query_result = execute_retrieve_first(neo4j_driver, query)
         if query_result:
             query_result = query_result['value']
     else:
-        query_nodes = set()
         for s,r,o in template_subgraph:
             match_nodes.append(f"(n{s})-[:{r}]->(n{o})")
             query_nodes.update([f'n{s}',f'n{o}'])
@@ -438,7 +403,7 @@ def generate_dialogue(neo4j_driver, dialogue_meta, limit=1, is_parallel=False, r
         str_query_nodes = ', '.join(list(query_nodes))
         str_query_where = ' AND '.join([f'{node}.{feature_name} > 0'for node in query_nodes])
         str_query_order = ' + '.join([f'{node}.{feature_name}' for node in query_nodes])
-        
+
         query = f"""
             MATCH {str_match_nodes} 
             WHERE {str_query_where} 
@@ -447,7 +412,7 @@ def generate_dialogue(neo4j_driver, dialogue_meta, limit=1, is_parallel=False, r
         """
 
         query_result = execute_retrieve_first(neo4j_driver, query)
-    
+
     # Handling for no result
     if not query_result:
         return None
@@ -474,13 +439,15 @@ def generate_dialogue(neo4j_driver, dialogue_meta, limit=1, is_parallel=False, r
             # Add new entity to used list
             used_entities.append(new_entity)
 
-    # Generate string version of the new dialogue
-    str_dialogue = []
-    for conv in chat_dialogue:
-        str_dialogue.append({
-            'speaker':conv['speaker'], 'text':conv['text'].str, 'entities':conv['text'].entities, "gold_KB":[]
-        })
-
+    str_dialogue = [
+        {
+            'speaker': conv['speaker'],
+            'text': conv['text'].str,
+            'entities': conv['text'].entities,
+            "gold_KB": [],
+        }
+        for conv in chat_dialogue
+    ]
     # Reset all RevertibleString to the original chat
     for entity in entity_to_chat.keys():
         for chat in entity_to_chat[entity]:
@@ -490,9 +457,7 @@ def generate_dialogue(neo4j_driver, dialogue_meta, limit=1, is_parallel=False, r
     execute_decrement_count(neo4j_driver, used_entities, suffix=suffix)
 
     # Return the generated dialog
-    if return_entity: 
-        return str_dialogue, used_entities
-    return str_dialogue
+    return (str_dialogue, used_entities) if return_entity else str_dialogue
 
 def write_dialogue_to_file(generated_dialogues, batch_size, random_seed):
     json.dump(generated_dialogues, open(f"./opendialkg/generated_dialogue_bs{batch_size}_rs{random_seed}.json","w"))

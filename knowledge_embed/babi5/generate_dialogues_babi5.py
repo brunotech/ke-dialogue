@@ -79,7 +79,7 @@ class BABI5Lexicalizer():
     def read_dialogue(template_path):
         dialogues = []
         dialogue = []
-        for line in open(template_path,'r').readlines():
+        for line in open(template_path,'r'):
             if len(line) == 1: # Only \n
                 dialogues.append(dialogue)
                 dialogue = []
@@ -115,9 +115,7 @@ class BABI5Lexicalizer():
                                         delex_to_chat_dict[recorded_delex_word] = []
                                     delex_to_chat_dict[recorded_delex_word].append(chat)
 
-                                    if max_delex_index < i:
-                                        max_delex_index = i
-
+                                    max_delex_index = max(max_delex_index, i)
             # Add result to global metadata buffer
             delexicalized_dialog_meta.append((dialogue, delex_to_chat_dict, delex_resolved_args_list, max_delex_index))
         return delexicalized_dialog_meta
@@ -131,15 +129,15 @@ class BABI5Lexicalizer():
         kb_sizes = []
         filtered_kbs = []
         for row in possible_queries_df.to_dict('records'):
-            filters = [(attr,value) for attr, value in row.items()]
+            filters = list(row.items())
             filtered_kb = query_equal_from_kb(kb, filters)
 
-            index_keys.append('_'.join([value for value in row.values()]))
+            index_keys.append('_'.join(list(row.values())))
             filtered_kbs.append(filtered_kb)
             kb_sizes.append(filtered_kb.shape[0])
-        index_kb = pd.DataFrame({'index':index_keys,'num_entity':kb_sizes,'kb':filtered_kbs}).set_index('index')
-
-        return index_kb
+        return pd.DataFrame(
+            {'index': index_keys, 'num_entity': kb_sizes, 'kb': filtered_kbs}
+        ).set_index('index')
 
     # Generate dialogue index function
     @staticmethod
@@ -151,9 +149,7 @@ class BABI5Lexicalizer():
         for dialogue, delex_to_chat_dict, delex_resolved_args_list, max_delex_index in delexicalized_dialog_meta:
             meta_data_list.append((dialogue, delex_to_chat_dict, delex_resolved_args_list, max_delex_index))
             num_entity_list.append(max_delex_index - 2)
-        index_dialog = pd.DataFrame({'num_entity':num_entity_list,'meta':meta_data_list})
-
-        return index_dialog
+        return pd.DataFrame({'num_entity':num_entity_list,'meta':meta_data_list})
 
     # Generate dialogue by kb and dialogue
     @staticmethod
@@ -184,27 +180,22 @@ class BABI5Lexicalizer():
 
         # Unfold meta dialogue
         dialogue, delex_to_chat_dict, delex_resolved_args_list, max_delex_index = dialogue_meta
-        
+
         # There is only 1 valid API call for BABI 5, which is the last one
         delex_resolved_args = delex_resolved_args_list[-1] 
-
-        # Resolved buffer
-        resolved_dict = {}
 
         # Resolve entity_2 from query
         ent_2_kb = filtered_kb[BABI5Lexicalizer.filter_keys]
         ent_2_row = ent_2_kb.to_dict('records')[0]
-        for key in ent_2_row.keys():
-            resolved_dict[f'{key}_2'] = ent_2_row[key]
-
+        resolved_dict = {f'{key}_2': ent_2_row[key] for key in ent_2_row.keys()}
         # Create filter for entity_1
         ent_1_filters = []
         for delex_resolved_word in delex_resolved_args:
             last_underscore_index = delex_resolved_word.rindex('_')
-            delex_key = delex_resolved_word[:last_underscore_index]
             delex_index = delex_resolved_word[last_underscore_index+1:]
 
             if delex_index == '1':
+                delex_key = delex_resolved_word[:last_underscore_index]
                 ent_1_filters.append((delex_resolved_word[:-2], resolved_dict[f'{delex_key}_2']))
 
         # Filter out entity_1 based on the fields on API call and value from entity_2
@@ -234,11 +225,10 @@ class BABI5Lexicalizer():
                 for chat in delex_to_chat_dict[delex_word]:
                     chat.str = chat.str.replace(delex_word, knowledge_value)
 
-        # Generate string version of the new dialogue
-        str_dialogue = []
-        for turn_id, request, response in dialogue:
-            str_dialogue.append((turn_id, request.str, response.str))
-
+        str_dialogue = [
+            (turn_id, request.str, response.str)
+            for turn_id, request, response in dialogue
+        ]
         # Reset all RevertibleString to the original chat
         for delex_word in delex_to_chat_dict.keys():
             for chat in delex_to_chat_dict[delex_word]:

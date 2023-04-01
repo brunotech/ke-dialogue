@@ -22,9 +22,9 @@ set_seed(42)
 
 fin = open("mapping.pair","r")
 replacements = []
-for line in fin.readlines():
+for line in fin:
     tok_from, tok_to = line.replace('\n', '').split('\t')
-    replacements.append((' ' + tok_from + ' ', ' ' + tok_to + ' '))
+    replacements.append((f' {tok_from} ', f' {tok_to} '))
 
 def insertSpace(token, text):
     sidx = 0
@@ -37,10 +37,10 @@ def insertSpace(token, text):
             sidx += 1
             continue
         if text[sidx - 1] != ' ':
-            text = text[:sidx] + ' ' + text[sidx:]
+            text = f'{text[:sidx]} {text[sidx:]}'
             sidx += 1
         if sidx + len(token) < len(text) and text[sidx + len(token)] != ' ':
-            text = text[:sidx + 1] + ' ' + text[sidx + 1:]
+            text = f'{text[:sidx + 1]} {text[sidx + 1:]}'
         sidx += 1
     return text
 
@@ -59,11 +59,9 @@ def normalize(text):
     text = re.sub(r"guest house", "guesthouse", text)
     text = re.sub(r"rosas bed and breakfast", "rosa s bed and breakfast", text)
     text = re.sub(r"el shaddia guesthouse", "el shaddai", text)
-    
 
-    # normalize phone number
-    ms = re.findall('\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4,5})', text)
-    if ms:
+
+    if ms := re.findall('\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4,5})', text):
         sidx = 0
         for m in ms:
             sidx = text.find(m[0], sidx)
@@ -72,10 +70,10 @@ def normalize(text):
             eidx = text.find(m[-1], sidx) + len(m[-1])
             text = text.replace(text[sidx:eidx], ''.join(m))
 
-    # normalize postcode
-    ms = re.findall('([a-z]{1}[\. ]?[a-z]{1}[\. ]?\d{1,2}[, ]+\d{1}[\. ]?[a-z]{1}[\. ]?[a-z]{1}|[a-z]{2}\d{2}[a-z]{2})',
-                    text)
-    if ms:
+    if ms := re.findall(
+        '([a-z]{1}[\. ]?[a-z]{1}[\. ]?\d{1,2}[, ]+\d{1}[\. ]?[a-z]{1}[\. ]?[a-z]{1}|[a-z]{2}\d{2}[a-z]{2})',
+        text,
+    ):
         sidx = 0
         for m in ms:
             sidx = text.find(m, sidx)
@@ -112,7 +110,7 @@ def normalize(text):
     text = re.sub('\'\s', ' ', text)
     text = re.sub('\s\'', ' ', text)
     for fromx, tox in replacements:
-        text = ' ' + text + ' '
+        text = f' {text} '
         text = text.replace(fromx, tox)[1:-1]
 
     # remove multiple spaces
@@ -150,7 +148,7 @@ def substringSieve(string_list):
     string_list.sort(key=lambda s: len(s), reverse=True)
     out = []
     for s in string_list:
-        if not any([s in o for o in out]):
+        if all(s not in o for o in out):
             out.append(s)
     return out
 
@@ -206,9 +204,12 @@ def parse_results(dic_data,semi,domain):
             if k in ["leaveAt","destination","departure","arriveBy"]:
                 book_query += f" {k} = '{normalize(t)}'"
 
-    if(domain == "hotel"):
-        if dic_data["day"]== "" or dic_data["stay"]== "" or dic_data["people"]== "":
-            return None,None
+    if (domain == "hotel") and (
+        dic_data["day"] == ""
+        or dic_data["stay"] == ""
+        or dic_data["people"] == ""
+    ):
+        return None,None
     results = None
     if(len(dic_data['booked'])>0):
         if(domain == "train" and 'trainID' in dic_data['booked'][0]):
@@ -240,10 +241,18 @@ def check_metadata(dic, state):
     return (None, None), state
 
 def get_booking_query(text):
-    domain = {"global":set(),"train":[],"attraction":[],"hotel":[],"restaurant":[],"taxi":[],
-              "police":[],"hospital":[],"generic":[]}
-    domain[text.split()[0]] = re.findall(r"'(.*?)'", text)
-    return domain
+    return {
+        "global": set(),
+        "train": [],
+        "attraction": [],
+        "hotel": [],
+        "restaurant": [],
+        "taxi": [],
+        "police": [],
+        "hospital": [],
+        "generic": [],
+        text.split()[0]: re.findall(r"'(.*?)'", text),
+    }
 
 def delexer(turns,dictionary,entity_name_info,info):
     text_delex = normalize(turns['text'])
@@ -251,7 +260,7 @@ def delexer(turns,dictionary,entity_name_info,info):
     for k,v in turns['dialog_act'].items():
         # if("Inform" in k or "Select" in k):
         for [att,val] in v:
-            if(att == 'Addr'):
+            if (att == 'Addr'):
                 if val.lower() in 'back lane, cambourne':
                     dictionary[att.lower()].append(normalize('back lane, cambourne'))
                 elif val.lower() in 'kingfisher way, hinchinbrook business park, huntingdon':
@@ -260,9 +269,8 @@ def delexer(turns,dictionary,entity_name_info,info):
                     dictionary[att.lower()].append(normalize('15-17 norman way, coldhams business park'))
                 elif val.lower() in 'sleeperz hotel, station road':
                     dictionary[att.lower()].append(normalize('sleeperz hotel, station road'))
-                else:
-                    if(val not in ["-","?","none"]):
-                        dictionary[att.lower()].append(normalize(val))
+                elif (val not in ["-","?","none"]):
+                    dictionary[att.lower()].append(normalize(val))
 
             elif(att not in ['Day','Stay','People','Parking',"Ref","Internet"]):
                 if(val not in ["-","?","none"]):
@@ -272,7 +280,7 @@ def delexer(turns,dictionary,entity_name_info,info):
     if(turns['metadata'] and turns['metadata']["hotel"]["semi"]['name'] != "not mentioned"):
         dictionary["name"].append(normalize(turns['metadata']["hotel"]["semi"]['name']))
 
-    
+
     for n in entity_name_info:
         if(normalize(n) in text_delex):
             dictionary["name"].append(normalize(n))
@@ -297,8 +305,8 @@ def get_start_end_ACT(ACT):
     dic = {}
     mapper = {"one":1,"two":2,"three":3,"3-star":3,"four":4,"five":5}
     for span in ACT:
-        if(span[1]=="Stars"):
-            if(span[2] in mapper.keys()):
+        if (span[1]=="Stars"):
+            if span[2] in mapper:
                 dic[mapper[span[2]]] = [span[3],span[4]]
             else:
                 dic[span[2]] = [span[3],span[4]]
@@ -321,7 +329,6 @@ def generate_all_query(dict_delex,info):
     contrains = [[None],[None],[None],[None]]
     query_template = {}
     results = {}
-    mapper_contrains = {0:"area",1:"stars",2:"price",3:"type"}
     if("area" in dict_delex):
         contrains[0] = all_areas
         query_template["area"] = ""
@@ -351,21 +358,22 @@ def generate_all_query(dict_delex,info):
     if("post" in dict_delex):
         results["postcode"] = ""
     lexicalized = []
-    if(all([1 if v[0]==None else 0 for v in contrains])):
+    if all(1 if v[0] is None else 0 for v in contrains):
+        choice = "1"
         for n in all_name:
             query = {"name":n}
             clmn = ["address","area","name","phone","postcode","pricerange","stars","type"]
             database.execute(to_query("hotel", query, clmn))
             row = database.fetchall()[0] ## a single row
-            choice = "1"
-            if(row[2]!= dict_delex["name"]):
+            if (row[2]!= dict_delex["name"]):
                 result = results.copy()
-                for k in results.keys():
+                for k in results:
                     result[k] = row[clmn.index(k.replace('price','pricerange'))]
                 if("choice" in dict_delex):
                     result["choice"] = choice
                 lexicalized.append(result)
     else:
+        mapper_contrains = {0:"area",1:"stars",2:"price",3:"type"}
         for combo in product(*contrains):
             query = query_template.copy()
 
@@ -376,11 +384,11 @@ def generate_all_query(dict_delex,info):
             database.execute(to_query("hotel", query, clmn).replace("price=","pricerange="))
             all_rows = database.fetchall()
             choice = str(len(all_rows))
-            if(len(all_rows)>0):
+            if (len(all_rows)>0):
                 for row in all_rows:
-                    if(row[2]!= dict_delex["name"]):
+                    if (row[2]!= dict_delex["name"]):
                         result = results.copy()
-                        for k in results.keys():
+                        for k in results:
                             result[k] = row[clmn.index(k.replace('price','pricerange'))]
                         if("choice" in dict_delex):
                             result["choice"] = choice

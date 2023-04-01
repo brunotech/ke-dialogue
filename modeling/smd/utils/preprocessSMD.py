@@ -15,26 +15,23 @@ def get_dialogue(dial,tokenizer):
     dialogue = []
     history = []
     for _, d in enumerate(dial):
-        if(d['spk']=='USR'):
-            history.append(tokenizer.encode(d["text"],add_special_tokens=False))
-        else:
+        if d['spk'] != 'USR':
             dialogue.append({"history":list(history),
                              "response":tokenizer.encode(d["text"],add_special_tokens=False),
                              "spk":d['spk']})
-            history.append(tokenizer.encode(d["text"],add_special_tokens=False))
+        history.append(tokenizer.encode(d["text"],add_special_tokens=False))
     return dialogue
 
 
 def generate_dataset(data_split,tokenizer,debugging=False):
-    num_lines = sum(1 for line in open(data_split,'r'))
+    num_lines = sum(1 for _ in open(data_split,'r'))
     with open(data_split,'r') as f:
         conversation = []
         data = []
         KB = []
         idd = 0
         for line in tqdm(f,total=num_lines):
-            line = line.strip()
-            if line:
+            if line := line.strip():
                 if '#' in line:
                     if(idd!=0):
                         dialogue = get_dialogue(conversation,tokenizer)
@@ -52,27 +49,25 @@ def generate_dataset(data_split,tokenizer,debugging=False):
                     u, r, _ = line.split('\t')
                     conversation.append({"spk":"USR","text":u})
                     conversation.append({"spk":"SYS","text":r})
-                else:
-                    if(len(line.split())==5 and task_type=="navigate"): 
+                elif (len(line.split())==5 and task_type=="navigate"): 
+                    KB.append(line.split())
+                elif(task_type=="weather"):
+                    if(len(line.split())==3):
                         KB.append(line.split())
-                    elif(task_type=="weather"):
-                        if(len(line.split())==3):
-                            KB.append(line.split())
-                        elif(len(line.split())==4):
-                            KB[-1] += [line.split()[-2],line.split()[-1]]
-                    else:
-                        KB.append(line.split()) 
+                    elif(len(line.split())==4):
+                        KB[-1] += [line.split()[-2],line.split()[-1]]
+                else:
+                    KB.append(line.split())
     return data 
 
 def generate_dataset_FINETUNE(data_split,tokenizer,debugging=False):
-    num_lines = sum(1 for line in open(data_split,'r'))
+    num_lines = sum(1 for _ in open(data_split,'r'))
     with open(data_split,'r') as f:
         conversation = []
         data = []
         idd = 0
         for line in tqdm(f,total=num_lines):
-            line = line.strip()
-            if line:
+            if line := line.strip():
                 _, line = line.split(' ', 1)
                 if '\t' in line:
                     u, r = line.split('\t')
@@ -107,8 +102,8 @@ def generate_template(global_entity, sentence, sent_ent, kb_arr, domain):
     Based on the system response and the provided entity table, the output is the sketch response. 
     """
     # print(sentence, sent_ent, kb_arr, domain)
-    
-    sketch_response = [] 
+
+    sketch_response = []
     counter = defaultdict(list)
     if sent_ent == []:
         sketch_response = sentence.split()
@@ -122,33 +117,33 @@ def generate_template(global_entity, sentence, sent_ent, kb_arr, domain):
                 #     for kb_item in kb_arr:
                 #         if word == kb_item[0]:
                 #             ent_type = kb_item[1]
-                if ent_type == None:
+                if ent_type is None:
                     for key in global_entity.keys():
                         if key!='poi':
                             global_entity[key] = [x.lower() for x in global_entity[key]]
                             if word in global_entity[key]:
                                 if word not in counter[key]:
                                     counter[key].append(word)
-                                ent_type = key+"_"+str(counter[key].index(word))
+                                ent_type = f"{key}_{str(counter[key].index(word))}"
                                 break
                             elif word.replace('_', ' ') in global_entity[key]:
                                 if word not in counter[key]:
                                     counter[key].append(word)
-                                ent_type = key+"_"+str(counter[key].index(word))
+                                ent_type = f"{key}_{str(counter[key].index(word))}"
                                 break
                         else:
                             poi_list = [d['poi'].lower() for d in global_entity['poi']]
                             if word in poi_list:
                                 if word not in counter[key]:
                                     counter[key].append(word)
-                                ent_type = key+"_"+str(counter[key].index(word))
+                                ent_type = f"{key}_{str(counter[key].index(word))}"
                                 break
                             elif word.replace('_', ' ') in poi_list:
                                 if word not in counter[key]:
                                     counter[key].append(word)
-                                ent_type = key+"_"+str(counter[key].index(word))
+                                ent_type = f"{key}_{str(counter[key].index(word))}"
                                 break
-                            
+
                             address_list = [d['address'].lower() for d in global_entity['poi']]
                             if word in address_list:
                                 if word not in counter['poi_address']:
@@ -161,23 +156,22 @@ def generate_template(global_entity, sentence, sent_ent, kb_arr, domain):
                                 ent_type = "poi_address_"+str(counter['poi_address'].index(word))
                                 break
 
-                if ent_type == None:
+                if ent_type is None:
                     print(sentence, sent_ent, kb_arr, domain)
-                sketch_response.append("@"+ent_type)
+                sketch_response.append(f"@{ent_type}")
     sketch_response = " ".join(sketch_response)
     return sketch_response
         
 def delex_SMD(file_name, global_entity, max_line = None):
-    print(("Reading lines from {}".format(file_name)))
+    print(f"Reading lines from {file_name}")
     data, context_arr, conv_arr, kb_arr = [], [], [], []
     max_resp_len = 0
-    
+
     conversation = []
     with open(file_name) as fin:
         cnt_lin, sample_counter = 1, 1
         for line in fin:
-            line = line.strip()
-            if line:
+            if line := line.strip():
                 if '#' in line:
                     line = line.replace("#","")
                     task_type = line
@@ -186,7 +180,7 @@ def delex_SMD(file_name, global_entity, max_line = None):
                 nid, line = line.split(' ', 1)
                 if '\t' in line:
                     u, r, gold_ent = line.split('\t')
-            
+
                     # Get gold entity for each domain
                     gold_ent = ast.literal_eval(gold_ent)
 
@@ -195,16 +189,19 @@ def delex_SMD(file_name, global_entity, max_line = None):
                     # print(u_gold_ent, gold_ent)
 
                     ent_idx_cal, ent_idx_nav, ent_idx_wet = [], [], []
-                    if task_type == "weather": ent_idx_wet = gold_ent
-                    elif task_type == "schedule": ent_idx_cal = gold_ent
-                    elif task_type == "navigate": ent_idx_nav = gold_ent
+                    if task_type == "navigate":
+                        ent_idx_nav = gold_ent
+                    elif task_type == "schedule":
+                        ent_idx_cal = gold_ent
+                    elif task_type == "weather":
+                        if task_type == "weather": ent_idx_wet = gold_ent
                     ent_index = list(set(ent_idx_cal + ent_idx_nav + ent_idx_wet))
-                    
+
                     usr_delex = generate_template(global_entity, u, u_gold_ent, kb_arr, task_type)
                     sys_delex = generate_template(global_entity, r, gold_ent, kb_arr, task_type)
 
                     conversation.append((nid, usr_delex, sys_delex))
-    
+
     # for (user, response) in conversation:
     #     print("U: ", user)
     #     print("R: ", response)
@@ -217,33 +214,32 @@ def delex_SMD(file_name, global_entity, max_line = None):
 
     # with open(out_file_path + "_template.txt", "w+") as f_out_template:
     with open(out_file_path, "w+") as f_out:
-        print("Saving to: {}".format(out_file_path))
+        print(f"Saving to: {out_file_path}")
 
         for i in range(len(conversation)):
             turn = conversation[i]
 
-            if turn[0] == "1": 
-                if i > 0: 
-                    f_out.write("\n")
+            if turn[0] == "1" and i > 0:
+                f_out.write("\n")
 
                     # check if the dialogue is unique
-                    key = " ".join(t[1] + " " + t[2] for t in temp_conversation)
-                    # if key not in unique_conversation:
-                    #     for conv in temp_conversation:
-                    #         f_out_template.write("{} {}\t{}\n".format(conv[0], conv[1], conv[2]))
-                    #     f_out_template.write("\n")
-                    unique_conversation[key] = True
+                key = " ".join(f"{t[1]} {t[2]}" for t in temp_conversation)
+                # if key not in unique_conversation:
+                #     for conv in temp_conversation:
+                #         f_out_template.write("{} {}\t{}\n".format(conv[0], conv[1], conv[2]))
+                #     f_out_template.write("\n")
+                unique_conversation[key] = True
 
-                    temp_conversation = []
-                    num_conversation += 1
-            
+                temp_conversation = []
+                num_conversation += 1
+
             temp_conversation.append((turn[0], turn[1], turn[2]))
-            f_out.write("{} {}\t{}\n".format(turn[0], turn[1], turn[2]))
+            f_out.write(f"{turn[0]} {turn[1]}\t{turn[2]}\n")
             unique_sentences[(turn[1], turn[2])] = True
-            
+
             if i == len(conversation)-1 and temp_conversation != "": 
                 # check if the dialogue is unique
-                key = " ".join(t[1] + " " + t[2] for t in temp_conversation)
+                key = " ".join(f"{t[1]} {t[2]}" for t in temp_conversation)
                 # if key not in unique_conversation:
                 #     for conv in temp_conversation:
                 #         f_out_template.write("{} {}\t{}\n".format(conv[0], conv[1], conv[2]))
@@ -252,7 +248,9 @@ def delex_SMD(file_name, global_entity, max_line = None):
 
                 num_conversation += 1
 
-    print("Number of convs: {} unique convs: {} unique sents: {}".format(num_conversation, len(unique_conversation), len(unique_sentences)))
+    print(
+        f"Number of convs: {num_conversation} unique convs: {len(unique_conversation)} unique sents: {len(unique_sentences)}"
+    )
 
                     
     

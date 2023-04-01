@@ -40,9 +40,10 @@ def sample_sequence(history, graph,tokenizer, model, args, current_output=None):
         nodes_ids = None
         if (args.graph or args.edge_list) and len(instance["input_graph_ids"])>0:
             max_c = max(len(col) for col in instance["input_graph_ids"])
-            temp = []
-            for clmn in instance["input_graph_ids"]:
-                temp.append(clmn + [padding] * (max_c - len(clmn)))
+            temp = [
+                clmn + [padding] * (max_c - len(clmn))
+                for clmn in instance["input_graph_ids"]
+            ]
             nodes_ids = torch.tensor([temp], device=args.device)
 
         att_mask = None
@@ -141,17 +142,23 @@ def finetune_model(args,model,loader):
     scheduler = PiecewiseLinear(optimizer, "lr", [(0, args.lr), (args.n_epochs * len(loader), 0.0)])
     trainer.add_event_handler(Events.ITERATION_STARTED, scheduler)
 
-        # Prepare metrics - note how we compute distributed metrics
     RunningAverage(output_transform=lambda x: x).attach(trainer, "loss")
     metrics = {"nll": Loss(torch.nn.CrossEntropyLoss(), output_transform=lambda x: (x[0][0], x[1][0]))}
-    metrics.update({"average_nll": MetricsLambda(average_distributed_scalar, metrics["nll"], args)})
+    metrics["average_nll"] = MetricsLambda(
+        average_distributed_scalar, metrics["nll"], args
+    )
     metrics["average_ppl"] = MetricsLambda(math.exp, metrics["average_nll"])
     for name, metric in metrics.items():
         metric.attach(evaluator, name)
-    
+
     pbar = ProgressBar(persist=True)
     pbar.attach(trainer, metric_names=["loss"])
-    evaluator.add_event_handler(Events.COMPLETED, lambda _: pbar.log_message("Validation: %s" % pformat(evaluator.state.metrics)))
+    evaluator.add_event_handler(
+        Events.COMPLETED,
+        lambda _: pbar.log_message(
+            f"Validation: {pformat(evaluator.state.metrics)}"
+        ),
+    )
     trainer.run(loader, max_epochs=args.n_epochs)
     return model
 
@@ -163,7 +170,7 @@ def get_training_file_for_KB(args,indx,tokenizer):
 
 if __name__ == "__main__":
     args = get_parser()
-    
+
     random.seed(args.seed)
     torch.random.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
@@ -206,5 +213,5 @@ if __name__ == "__main__":
         ## reload original models
         if(len(conv["edges"]) > 0):
             model, tokenizer = load_model(args,load=True)
-    with open(args.model_checkpoint+'/result_splits/'+ str(start_ind) + '_' + str(end_ind) + '.json', 'w') as fp:
+    with open(f'{args.model_checkpoint}/result_splits/{start_ind}_{end_ind}.json', 'w') as fp:
         json.dump(j_output, fp, indent=4)

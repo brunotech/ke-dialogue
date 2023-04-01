@@ -27,10 +27,10 @@ def insertSpace(token, text):
             sidx += 1
             continue
         if text[sidx - 1] != ' ':
-            text = text[:sidx] + ' ' + text[sidx:]
+            text = f'{text[:sidx]} {text[sidx:]}'
             sidx += 1
         if sidx + len(token) < len(text) and text[sidx + len(token)] != ' ':
-            text = text[:sidx + 1] + ' ' + text[sidx + 1:]
+            text = f'{text[:sidx + 1]} {text[sidx + 1:]}'
         sidx += 1
     return text
 
@@ -51,11 +51,9 @@ def normalize(text):
     text = re.sub(r"guest house", "guesthouse", text)
     text = re.sub(r"rosas bed and breakfast", "rosa s bed and breakfast", text)
     text = re.sub(r"el shaddia guesthouse", "el shaddai", text)
-    
 
-    # normalize phone number
-    ms = re.findall('\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4,5})', text)
-    if ms:
+
+    if ms := re.findall('\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4,5})', text):
         sidx = 0
         for m in ms:
             sidx = text.find(m[0], sidx)
@@ -64,10 +62,10 @@ def normalize(text):
             eidx = text.find(m[-1], sidx) + len(m[-1])
             text = text.replace(text[sidx:eidx], ''.join(m))
 
-    # normalize postcode
-    ms = re.findall('([a-z]{1}[\. ]?[a-z]{1}[\. ]?\d{1,2}[, ]+\d{1}[\. ]?[a-z]{1}[\. ]?[a-z]{1}|[a-z]{2}\d{2}[a-z]{2})',
-                    text)
-    if ms:
+    if ms := re.findall(
+        '([a-z]{1}[\. ]?[a-z]{1}[\. ]?\d{1,2}[, ]+\d{1}[\. ]?[a-z]{1}[\. ]?[a-z]{1}|[a-z]{2}\d{2}[a-z]{2})',
+        text,
+    ):
         sidx = 0
         for m in ms:
             sidx = text.find(m, sidx)
@@ -104,7 +102,7 @@ def normalize(text):
     text = re.sub('\'\s', ' ', text)
     text = re.sub('\s\'', ' ', text)
     for fromx, tox in replacements:
-        text = ' ' + text + ' '
+        text = f' {text} '
         text = text.replace(fromx, tox)[1:-1]
 
     # remove multiple spaces
@@ -142,7 +140,7 @@ def substringSieve(string_list):
     string_list.sort(key=lambda s: len(s), reverse=True)
     out = []
     for s in string_list:
-        if not any([s in o for o in out]):
+        if all(s not in o for o in out):
             out.append(s)
     return out
 
@@ -181,29 +179,29 @@ def to_query(domain, dic, reqt):
     return q
 
 def convert_time_int_to_time(all_rows,clmn):#leaveAt_id,arriveBy_id):
-    leaveAt_id = -1
-    arriveBy_id = -1
-    if('leaveAt' in clmn):
-        leaveAt_id = clmn.index('leaveAt')
-    if('arriveBy' in clmn):
-        arriveBy_id = clmn.index('arriveBy')
-    if(leaveAt_id!= -1):
+    leaveAt_id = clmn.index('leaveAt') if ('leaveAt' in clmn) else -1
+    arriveBy_id = clmn.index('arriveBy') if ('arriveBy' in clmn) else -1
+    if (leaveAt_id!= -1):
         for i in range(len(all_rows)):
             all_rows[i] = list(all_rows[i])
             time = all_rows[i][leaveAt_id]
             mins=int(time%60)
             hours=int(time/60)
-            if(len(str(hours)))==1: hours = "0"+str(hours)
-            if(len(str(mins)))==1: mins = "0"+str(mins)
+            if (len(str(hours)))==1:
+                hours = f"0{hours}"
+            if (len(str(mins)))==1:
+                mins = f"0{mins}"
             all_rows[i][leaveAt_id] = str(hours)+str(mins)
-    if(arriveBy_id!= -1):
+    if (arriveBy_id!= -1):
         for i in range(len(all_rows)):
             all_rows[i] = list(all_rows[i])
             time = all_rows[i][arriveBy_id]
             mins=int(time%60)
             hours=int(time/60)
-            if(len(str(hours)))==1: hours = "0"+str(hours)
-            if(len(str(mins)))==1: mins = "0"+str(mins)
+            if (len(str(hours)))==1:
+                hours = f"0{hours}"
+            if (len(str(mins)))==1:
+                mins = f"0{mins}"
             all_rows[i][arriveBy_id] = str(hours)+str(mins)
     return all_rows
 
@@ -214,9 +212,12 @@ def parse_results(dic_data,semi,domain):
             if k in ["leaveAt","destination","departure","arriveBy"]:
                 book_query += f" {k} = '{normalize(t)}'"
 
-    if(domain == "hotel"):
-        if dic_data["day"]== "" or dic_data["stay"]== "" or dic_data["people"]== "":
-            return None,None
+    if (domain == "hotel") and (
+        dic_data["day"] == ""
+        or dic_data["stay"] == ""
+        or dic_data["people"] == ""
+    ):
+        return None,None
     results = None
     if(len(dic_data['booked'])>0):
         if(domain == "train" and 'trainID' in dic_data['booked'][0]):
@@ -237,10 +238,18 @@ def parse_results(dic_data,semi,domain):
     return book_query, results
 
 def get_booking_query(text):
-    domain = {"global":set(),"train":[],"attraction":[],"hotel":[],"restaurant":[],"taxi":[],
-              "police":[],"hospital":[],"generic":[]}
-    domain[text.split()[0]] = re.findall(r"'(.*?)'", text)
-
+    domain = {
+        "global": set(),
+        "train": [],
+        "attraction": [],
+        "hotel": [],
+        "restaurant": [],
+        "taxi": [],
+        "police": [],
+        "hospital": [],
+        "generic": [],
+        text.split()[0]: re.findall(r"'(.*?)'", text),
+    }
     domain["global"] = dict(domain["global"])
 
     return domain
@@ -259,8 +268,8 @@ def get_start_end_ACT(ACT):
     dic = {}
     mapper = {"one":1,"two":2,"three":3,"3-star":3,"four":4,"five":5}
     for span in ACT:
-        if(span[1]=="Stars"):
-            if(span[2] in mapper.keys()):
+        if (span[1]=="Stars"):
+            if span[2] in mapper:
                 dic[mapper[span[2]]] = [span[3],span[4]]
             else:
                 dic[span[2]] = [span[3],span[4]]
@@ -282,15 +291,16 @@ def get_domain_entity(act):
               "police":[],"hospital":[],"generic":[]}
     booking_entities = []
     for k,v in act.items():
-        if(k.split("-")[0].lower() in domain.keys()):
+        if k.split("-")[0].lower() in domain:
             for val in v:
                 if(val and val[1]!="?" and val[1]!= 'none'):
                     domain[k.split("-")[0].lower()].append(val[1])
-        else:
-            if k == "Booking-Book" or k == "OfferBooked" or "Booked" in k or "Book"in k:
-                for val in v:
-                    if(val and val[1]!="?" and val[1]!= 'none'):
-                        booking_entities.append(val[1])
+        elif k == "Booking-Book" or k == "OfferBooked" or "Booked" in k or "Book"in k:
+            booking_entities.extend(
+                val[1]
+                for val in v
+                if (val and val[1] != "?" and val[1] != 'none')
+            )
     domain["global"] = dict(domain["global"])
     return domain, booking_entities
 
@@ -309,9 +319,9 @@ def get_entity_by_type(domain, info,clmn,post_fix="-info"):
 
 fin = open("mapping.pair","r")
 replacements = []
-for line in fin.readlines():
+for line in fin:
     tok_from, tok_to = line.replace('\n', '').split('\t')
-    replacements.append((' ' + tok_from + ' ', ' ' + tok_to + ' '))
+    replacements.append((f' {tok_from} ', f' {tok_to} '))
 
 pp = pprint.PrettyPrinter(indent=4)
 conn = sqlite3.connect('MWOZ.db')
@@ -329,14 +339,14 @@ domains = ["attraction", "hotel", "restaurant", "taxi", "train", "all"]
 # create directories
 print("create directories")
 for out in ["train", "valid", "test"]:
-    path = "MultiWOZ_2.1/{}/".format(out)
+    path = f"MultiWOZ_2.1/{out}/"
     if not os.path.exists(path):
         os.makedirs(path)
 
 stats = {"all":{}}
 for domain in domains:
     if domain != "all":
-        domain_single = domain + "_single"
+        domain_single = f"{domain}_single"
         stats[domain_single] = {}
 
 for i, dataset in enumerate([train, valid, test]):
@@ -347,19 +357,19 @@ for i, dataset in enumerate([train, valid, test]):
     print("generate:", out)
 
     domain = ""
-    
+
     conversations = {"all":{}}
     for domain in domains:
         if domain != "all":
-            domain_single = domain + "_single"
+            domain_single = f"{domain}_single"
         conversations[domain_single] = {}
 
     for k, dial in dataset.items():
         for domain in domains:
             if domain != "all":
-                domain_single = domain + "_single"
+                domain_single = f"{domain}_single"
 
-                if not k.lower() in split_by_single_and_domain[domain_single]:
+                if k.lower() not in split_by_single_and_domain[domain_single]:
                     continue
             else:
                 domain_single = "all"
@@ -368,35 +378,45 @@ for i, dataset in enumerate([train, valid, test]):
             state = {"train":0, "attraction":0, "hotel":0, "restaurant":0, "hospital":0, "police":0, "taxi":0, "bus":0}
             for turns in dial["log"]:
                 text_delex = normalize(turns['text'])
-                if(turns['metadata']):
+                if turns['metadata']:
                     if out == "test":
                         entities_by_domain, booking_entities = get_domain_entity(turns["dialog_act"])
                     else:
-                        entities_by_domain = {"global":dict(),"train":[],"attraction":[],"hotel":[],"restaurant":[],"taxi":[],
-                            "police":[],"hospital":[],"generic":[]}
+                        entities_by_domain = {
+                            "global": {},
+                            "train": [],
+                            "attraction": [],
+                            "hotel": [],
+                            "restaurant": [],
+                            "taxi": [],
+                            "police": [],
+                            "hospital": [],
+                            "generic": [],
+                        }
                         booking_entities = []
-                    
+
                     (book, results), state = check_metadata(turns['metadata'],state)
-                    if(book):
+                    if book:
                         entities_by_domain_book = get_booking_query(book)
                         book_delex = book
 
                         conversation.append({ "spk": "SYS-API", "entities": entities_by_domain_book, "text": book })
                         dom_API = book.split()[0] ## first token is the API domain
                         ## THIS IS A SIMULATION OF AN API RESULTS
-                        if("dialog_act" in turns and dom_API == "train" and "Train-OfferBooked" in turns["dialog_act"]):
+                        if ("dialog_act" in turns and dom_API == "train" and "Train-OfferBooked" in turns["dialog_act"]):
                             for elem_ in turns["dialog_act"]["Train-OfferBooked"]:
-                                if(elem_[0]=="Ticket" and elem_[1] != "None"):
+                                if (elem_[0]=="Ticket" and elem_[1] != "None"):
                                     results = str(results)
-                                    results += " " + str(elem_[1])
-                        if(domain_single == "taxi_single"):
-                            if isinstance(results, dict):
-                                str_results = ""
-                                for val in results.values():
-                                    if str_results != "":
-                                        str_results += " "
-                                    str_results += val
-                                results = str_results
+                                    results += f" {str(elem_[1])}"
+                        if (domain_single == "taxi_single") and isinstance(
+                            results, dict
+                        ):
+                            str_results = ""
+                            for val in results.values():
+                                if str_results != "":
+                                    str_results += " "
+                                str_results += val
+                            results = str_results
 
                         entities_by_domain[dom_API] = list(set(entities_by_domain[dom_API]+booking_entities))
                         conversation.append({"spk": "API", "text": str(results).lower()})
@@ -409,12 +429,10 @@ for i, dataset in enumerate([train, valid, test]):
 
     print(conversations.keys())
     all_conversations = []
-    for key in conversations:
-        for idx in conversations[key]:
-            all_conversations.append(conversations[key][idx])
-
+    for key, value in conversations.items():
+        all_conversations.extend(conversations[key][idx] for idx in value)
         stats[key][out] = len(conversations[key])
-        path = "MultiWOZ_2.1/{}/{}.json".format(out, key)
+        path = f"MultiWOZ_2.1/{out}/{key}.json"
         print("saving", key, path, len(conversations[key]))
         with open(path, "w") as outfile: 
             json.dump(conversations[key], outfile, indent=4)
@@ -422,14 +440,13 @@ for i, dataset in enumerate([train, valid, test]):
     dict_conversations = {}
     for conv in all_conversations:
         dict_conversations[len(dict_conversations) + 1] = conv
-    path = "MultiWOZ_2.1/{}_data.json".format(out)
+    path = f"MultiWOZ_2.1/{out}_data.json"
     with open(path, "w") as outfile:
         json.dump(dict_conversations, outfile, indent=4)
     print("saving", path, len(all_conversations))
 
-# print
-tab = []
-for key in stats:
-    tab.append([key, stats[key]["train"], stats[key]["valid"], stats[key]["test"]])
-
+tab = [
+    [key, value_["train"], stats[key]["valid"], stats[key]["test"]]
+    for key, value_ in stats.items()
+]
 print(tabulate(tab, headers=["domain", "train", "valid", "test"], tablefmt='orgtbl'))

@@ -19,17 +19,15 @@ def get_dialogue(dial,tokenizer):
     dialogue = []
     history = []
     for _, d in enumerate(dial):
-        if(d['spk']=='USR'):
-            history.append(tokenizer.encode(d["text"],add_special_tokens=False))
-        else:
+        if d['spk'] != 'USR':
             dialogue.append({"history":list(history),
                              "response":tokenizer.encode(d["text"],add_special_tokens=False),
                              "spk":d['spk']})
-            history.append(tokenizer.encode(d["text"],add_special_tokens=False))
+        history.append(tokenizer.encode(d["text"],add_special_tokens=False))
     return dialogue
 
 def generate_dataset(data_split,tokenizer,debugging=False):
-    num_lines = sum(1 for line in open(data_split,'r'))
+    num_lines = sum(1 for _ in open(data_split,'r'))
     with open(data_split,'r') as f:
         conversation = []
         data = []

@@ -47,9 +47,10 @@ def sample_sequence(history, graph,tokenizer, model, args, current_output=None):
         nodes_ids = None
         if (args.graph or args.edge_list) and len(instance["input_graph_ids"])>0:
             max_c = max(len(col) for col in instance["input_graph_ids"])
-            temp = []
-            for clmn in instance["input_graph_ids"]:
-                temp.append(clmn + [padding] * (max_c - len(clmn)))
+            temp = [
+                clmn + [padding] * (max_c - len(clmn))
+                for clmn in instance["input_graph_ids"]
+            ]
             nodes_ids = torch.tensor([temp], device=args.device)
 
         att_mask = None

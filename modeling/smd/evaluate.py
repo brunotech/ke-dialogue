@@ -40,9 +40,10 @@ def sample_sequence(history, graph,tokenizer, model, args, current_output=None):
         nodes_ids = None
         if (args.graph or args.edge_list) and len(instance["input_graph_ids"])>0:
             max_c = max(len(col) for col in instance["input_graph_ids"])
-            temp = []
-            for clmn in instance["input_graph_ids"]:
-                temp.append(clmn + [padding] * (max_c - len(clmn)))
+            temp = [
+                clmn + [padding] * (max_c - len(clmn))
+                for clmn in instance["input_graph_ids"]
+            ]
             nodes_ids = torch.tensor([temp], device=args.device)
 
         att_mask = None
@@ -71,7 +72,7 @@ def sample_sequence(history, graph,tokenizer, model, args, current_output=None):
 
 if __name__ == "__main__":
     args = get_parser()
-    
+
     random.seed(args.seed)
     torch.random.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
@@ -88,7 +89,7 @@ if __name__ == "__main__":
             out_text = tokenizer.decode(out_ids, skip_special_tokens=True)
             j_output[conv["id"]].append({"spk":sample['spk'],"text":out_text})
 
-    with open(args.model_checkpoint+'/result.json', 'w') as fp:
+    with open(f'{args.model_checkpoint}/result.json', 'w') as fp:
         json.dump(j_output, fp, indent=4)
 
             

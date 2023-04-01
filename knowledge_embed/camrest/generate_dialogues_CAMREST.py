@@ -49,7 +49,7 @@ class BABI7Lexicalizer():
     def read_dialogue(template_path):
         dialogues = []
         dialogue = []
-        for line in open(template_path,'r').readlines():
+        for line in open(template_path,'r'):
             if len(line) == 1: # Only \n
                 dialogues.append(dialogue)
                 dialogue = []
@@ -82,9 +82,7 @@ class BABI7Lexicalizer():
                                     if recorded_delex_word not in delex_to_chat_dict:
                                         delex_to_chat_dict[recorded_delex_word] = []
                                     delex_to_chat_dict[recorded_delex_word].append(chat)
-                                    if max_delex_index < i:
-                                        max_delex_index = i
-
+                                    max_delex_index = max(max_delex_index, i)
                 # If api_call
                 if response.str.startswith(BABI7Lexicalizer.api_call_pattern):
                     delex_words = response.str.split(' ')[1:]
@@ -121,17 +119,16 @@ class BABI7Lexicalizer():
             kb_sizes = []
             filtered_kbs = []
             for row in possible_queries_df.to_dict('records'):
-                filters = [(attr,value) for attr, value in row.items()]
+                filters = list(row.items())
                 filtered_kb = query_equal_from_kb(kb, filters)
-                index_keys.append('_'.join([value for value in row.values()]))
+                index_keys.append('_'.join(list(row.values())))
                 kb_sizes.append(filtered_kb.shape[0])
                 filter_types.append(filter_type)
                 filtered_kbs.append(filtered_kb) 
-                
+
             index_data = {'index':index_keys,'filter_type':filter_types,'num_entity':kb_sizes,'kb':filtered_kbs}
             index_kbs.append(pd.DataFrame(index_data).set_index('index'))
-        index_kb = pd.concat(index_kbs)
-        return index_kb
+        return pd.concat(index_kbs)
 
     # Generate dialogue index function
     @staticmethod
@@ -145,18 +142,22 @@ class BABI7Lexicalizer():
             _, _, delex_resolved_args_list, max_delex_index, query_max_delex_index = dialogue_meta
             meta_data_list.append(dialogue_meta)
             num_entity_list.append(max_delex_index - query_max_delex_index)
-            if len(delex_resolved_args_list) > 0:
-                 # There is only 1 api_call maximum in babi7, process the first element if any
-                if len(delex_resolved_args_list[0]) == 0:
-                     # There is api_call with no delexicalized parameter
-                    filter_type_list.append('_')
-                else:
-                    filter_type_list.append('_'.join([delex_word[:-2] for delex_word in delex_resolved_args_list[0]]))
-            else:
-                 # If there is no api_call, add to global index
+            if (
+                len(delex_resolved_args_list) > 0
+                and len(delex_resolved_args_list[0]) == 0
+                or len(delex_resolved_args_list) <= 0
+            ):
+                 # There is api_call with no delexicalized parameter
                 filter_type_list.append('_')
-        index_dialog = pd.DataFrame({'filter_type':filter_type_list, 'num_entity':num_entity_list,'meta':meta_data_list})
-        return index_dialog
+            else:
+                filter_type_list.append('_'.join([delex_word[:-2] for delex_word in delex_resolved_args_list[0]]))
+        return pd.DataFrame(
+            {
+                'filter_type': filter_type_list,
+                'num_entity': num_entity_list,
+                'meta': meta_data_list,
+            }
+        )
 
     # Generate dialogue by kb and dialogue
     @staticmethod
@@ -239,11 +240,10 @@ class BABI7Lexicalizer():
                 for chat in delex_to_chat_dict[delex_word]:
                     chat.str = chat.str.replace(delex_word, knowledge_value)
 
-        # Generate string version of the new dialogue
-        str_dialogue = []
-        for turn_id, request, response in dialogue:
-            str_dialogue.append((turn_id, request.str, response.str))
-
+        str_dialogue = [
+            (turn_id, request.str, response.str)
+            for turn_id, request, response in dialogue
+        ]
         # Reset all RevertibleString to the original chat
         for delex_word in delex_to_chat_dict.keys():
             for chat in delex_to_chat_dict[delex_word]:
@@ -282,19 +282,19 @@ if __name__ == '__main__':
     # Print begin information
     print('== Selective Generation BABI 7 Dialogue ==')
     print(args)
-    
+
     # Start Timer
     start = timeit.default_timer()  
-    
+
     # Args
     dialogue_path = args["dialogue_path"]
     knowledge_path = args["knowledge_path"]
     knowledge_modifier_path = args["knowledge_modifier_path"]
-    
+
     num_augmented_knowledge = args['num_augmented_knowledge']
     num_augmented_dialogue = args['num_augmented_dialogue']
     random_seed = args['random_seed']
-    
+
     output_folder = args['output_folder']
     output_path = f'{output_folder}/gen-babi7-nk{num_augmented_knowledge}-nd{num_augmented_dialogue}-rs{random_seed}.txt'
 
@@ -314,6 +314,7 @@ if __name__ == '__main__':
     # Sampled KB
     sampled_kb = index_kb.sample(num_augmented_knowledge, random_state=random_seed)
     str_dialogues = []
+    num_dialogue_generated = 0
     for i in range(num_augmented_knowledge):
         filtered_kb = sampled_kb['kb'][i]
         filtered_kb_size = sampled_kb['num_entity'][i]
@@ -330,7 +331,6 @@ if __name__ == '__main__':
 
         # Generate possible (dialogue_meta, filtered KB) pairs to maximize the knowledge coverage
         filtered_kb = filtered_kb.sample(filtered_kb.shape[0], random_state=random_seed)
-        num_dialogue_generated = 0
         kb_idx = 0
         dialog_kb_pairs = []
         for dialogue_meta in dialogue_metas:
@@ -352,7 +352,7 @@ if __name__ == '__main__':
             str_dialogues.append(str_dialogue)
 
     BABI7Lexicalizer.dump_dialogue_to_file(str_dialogues, output_path)
-    
+
     # Print Execution time
     stop = timeit.default_timer()
 

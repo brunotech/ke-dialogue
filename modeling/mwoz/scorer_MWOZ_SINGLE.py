@@ -25,34 +25,34 @@ def checker_global_ent(e,gold):
   return sub_string and nonumber
 
 def substringSieve(string_list):
-    string_list.sort(key=lambda s: len(s), reverse=True)
-    out = []
-    for s in string_list:
-        if not any([s in o for o in out]):
-            out.append(s)
-    return out
+  string_list.sort(key=lambda s: len(s), reverse=True)
+  out = []
+  for s in string_list:
+    if all(s not in o for o in out):
+      out.append(s)
+  return out
 
 def compute_prf(pred, gold, global_entity_list):
-    TP, FP, FN = 0, 0, 0
-    if len(gold)!= 0:
-        count = 1
-        for g in gold:
-            if g.lower() in pred.lower():
-                TP += 1
-            else:
-                FN += 1
-        list_FP = []
-        for e in list(set(global_entity_list)):
-            if e.lower() in pred.lower() and checker_global_ent(e,gold):
-                if(e.lower() not in gold):
-                    list_FP.append(e)
-        FP = len(list(set(substringSieve(list_FP))))
-        precision = TP / float(TP+FP) if (TP+FP)!=0 else 0
-        recall = TP / float(TP+FN) if (TP+FN)!=0 else 0
-        F1 = 2 * precision * recall / float(precision + recall) if (precision+recall)!=0 else 0
-    else:
-        precision, recall, F1, count = 0, 0, 0, 0
-    return F1, count
+  TP, FP, FN = 0, 0, 0
+  if len(gold)!= 0:
+    count = 1
+    for g in gold:
+        if g.lower() in pred.lower():
+            TP += 1
+        else:
+            FN += 1
+    list_FP = [
+        e for e in list(set(global_entity_list))
+        if e.lower() in pred.lower() and checker_global_ent(e, gold) and (
+            e.lower() not in gold)
+    ]
+    FP = len(list(set(substringSieve(list_FP))))
+    precision = TP / float(TP+FP) if (TP+FP)!=0 else 0
+    recall = TP / float(TP+FN) if (TP+FN)!=0 else 0
+    F1 = 2 * precision * recall / float(precision + recall) if (precision+recall)!=0 else 0
+  else:
+    precision, recall, F1, count = 0, 0, 0, 0
+  return F1, count
 
 def get_global_entity_MWOZ():
   with open('data/MultiWOZ_2.1/ontology.json') as f:
@@ -68,11 +68,7 @@ def get_global_entity_MWOZ():
 
 
 def get_entity(KB, sentence):
-    list_entity = []
-    for e in KB:
-        if e.lower() in sentence.lower():
-            list_entity.append(e.lower())
-    return list_entity
+  return [e.lower() for e in KB if e.lower() in sentence.lower()]
 
 
 
@@ -90,14 +86,12 @@ def get_splits(data,test_split,val_split):
     return train, valid, test
 
 def get_dialog_single(gold_json,split_by_single_and_domain):
-    test  = {}
-    single_index = sum([ idex for n,idex in split_by_single_and_domain.items() if "single" in n and n not in ["police_single","hospital_single"]],[])
-    # single_index = sum([ idex for n,idex in split_by_single_and_domain.items() if "single" in n and n not in ["taxi_single","police_single","hospital_single"]],[])
-
-    for k, v in gold_json.items():
-        if(k.lower() in single_index):
-            test[k] = v
-    return test
+  single_index = sum(
+      (idex for n, idex in split_by_single_and_domain.items()
+       if "single" in n and n not in ["police_single", "hospital_single"]),
+      [],
+  )
+  return {k: v for k, v in gold_json.items() if (k.lower() in single_index)}
 
 def checkin(ent,li):
     for e in li: 
@@ -118,28 +112,33 @@ with open('data/MultiWOZ_2.1/ontology.json') as f:
                 ontology[domain][slot] = global_entity[key]
                 
 def to_query(domain, dic, reqt):
-    if reqt:
-        q = f"SELECT {','.join(reqt)} FROM {domain} where"
-    else:
-        q = f"SELECT * FROM {domain} where"
-    for k,v in dic.items():
-        if v == "" or v == "dontcare" or v == 'not mentioned' or v == "don't care" or v == "dont care" or v == "do n't care":
-            pass
-        else:
-            if k == 'leaveAt':
-                hour, minute = v.split(":")
-                v = int(hour)*60 + int(minute)
-                q += f' {k}>{v} and'
-            elif k == 'arriveBy':
-                hour, minute = v.split(":")
-                v = int(hour)*60 + int(minute)
-                q += f' {k}<{v} and'
-            else:
-                q += f' {k}="{v}" and'
+  if reqt:
+      q = f"SELECT {','.join(reqt)} FROM {domain} where"
+  else:
+      q = f"SELECT * FROM {domain} where"
+  for k,v in dic.items():
+    if v not in [
+        "",
+        "dontcare",
+        'not mentioned',
+        "don't care",
+        "dont care",
+        "do n't care",
+    ]:
+      if k == 'arriveBy':
+        hour, minute = v.split(":")
+        v = int(hour)*60 + int(minute)
+        q += f' {k}<{v} and'
+      elif k == 'leaveAt':
+        hour, minute = v.split(":")
+        v = int(hour)*60 + int(minute)
+        q += f' {k}>{v} and'
+      else:
+        q += f' {k}="{v}" and'
 
 
-    q = q[:-3] ## this just to remove the last AND from the query 
-    return q
+  q = q[:-3] ## this just to remove the last AND from the query 
+  return q
 
 def align_GPT2(text):
     return text.replace("."," .").replace("?"," ?").replace(","," ,").replace("!"," !").replace("'"," '").replace("  "," ")

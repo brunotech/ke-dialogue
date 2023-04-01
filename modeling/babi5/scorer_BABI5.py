@@ -47,29 +47,29 @@ def entityList(kb_path, task_id):
     type_dict = get_type_dict(kb_path, dstc2=(task_id==6))
     entity_list = []
     for key in type_dict.keys():
-        for value in type_dict[key]:
-            entity_list.append(value)
+        entity_list.extend(iter(type_dict[key]))
     return entity_list
 
 
 def compute_prf(pred, gold, global_entity_list):
     TP, FP, FN = 0, 0, 0
-    if len(gold)!= 0:
-        for g in gold:
-            if g.lower() in pred:
-                TP += 1
-            else:
-                FN += 1
-        for p in set(pred):
-            if p in global_entity_list:
-                if p not in gold:
-                    FP += 1
-        precision = TP / float(TP+FP) if (TP+FP)!=0 else 0
-        recall = TP / float(TP+FN) if (TP+FN)!=0 else 0
-        F1 = 2 * precision * recall / float(precision + recall) if (precision+recall)!=0 else 0
-    else:
-        F1 = None
-    return F1
+    if len(gold) == 0:
+        return None
+    for g in gold:
+        if g.lower() in pred:
+            TP += 1
+        else:
+            FN += 1
+    for p in set(pred):
+        if p in global_entity_list and p not in gold:
+            FP += 1
+    precision = TP / float(TP+FP) if (TP+FP)!=0 else 0
+    recall = TP / float(TP+FN) if (TP+FN)!=0 else 0
+    return (
+        2 * precision * recall / float(precision + recall)
+        if (precision + recall) != 0
+        else 0
+    )
 
 
 def score_BABI(model,file_to_score,OOV,layer,KB):
@@ -115,11 +115,7 @@ def score_BABI(model,file_to_score,OOV,layer,KB):
             }
 
 def get_entity(KB, sentence):
-    list_entity = []
-    for key in sentence.split(' '):
-        if(key in KB):
-            list_entity.append(key)
-    return list_entity
+    return [key for key in sentence.split(' ') if (key in KB)]
 
 def score_DSTC2(model,file_to_score):
     global_ent = entityList('data/dialog-bAbI-tasks/dialog-babi-task6-dstc2-kb.txt',6)
@@ -135,7 +131,7 @@ def score_DSTC2(model,file_to_score):
         idd = 0
         j = 0
         for line in f:
-            if(line == "\n"):
+            if (line == "\n"):
                 turn_acc += acc_temp
                 if(all(ele == 1 for ele in acc_temp)):
                     dial_acc.append(1)
@@ -148,7 +144,7 @@ def score_DSTC2(model,file_to_score):
                 _, line = line.replace("\n","").split(' ', 1)
                 if ("\t" in line):
                     _, syst = line.split("\t")
-                    if("i'm on it" not in syst and "api_call" not in syst and "ok let me look into some options for you" not in syst and "Hello , welcome to the Cambridge restaurant system . You can ask for restaurants by area , price range or food type . How may I help you ?" not in syst):
+                    if ("i'm on it" not in syst and "api_call" not in syst and "ok let me look into some options for you" not in syst and "Hello , welcome to the Cambridge restaurant system . You can ask for restaurants by area , price range or food type . How may I help you ?" not in syst):
                         assert genr_json[str(idd)][j]["spk"] == "SYS"
                         ## FOR BLUE SCORE
                         GOLD.append(syst)
@@ -156,8 +152,7 @@ def score_DSTC2(model,file_to_score):
                         ## FOR ENTITY F1
                         gold_ent = get_entity(global_ent, syst)
                         pred = genr_json[str(idd)][j]['text'].strip().split(" ")
-                        F1 = compute_prf(pred, gold_ent, global_ent)
-                        if(F1): 
+                        if F1 := compute_prf(pred, gold_ent, global_ent):
                             F1_score.append(F1)
 
                         ### DIALGOUE ACCURACY and ACCURACY 
@@ -187,7 +182,7 @@ rows_BABI = [
 ]
 
 for f in glob.glob("runs/*"):
-    if("BABI" in f and os.path.isfile(f+'/result.json')):
+    if "BABI" in f and os.path.isfile(f'{f}/result.json'):
         params = f.split("/")[1].split("_")
 
         balance_sampler = False
@@ -197,7 +192,18 @@ for f in glob.glob("runs/*"):
             d_name,model,_,graph,_,adj,_,edge,_,unilm,_,flattenKB,_,hist_L,_,LR,_,epoch,_,wt,_,kb,_,lay = params
 
         st = model.replace("gpt2-bAbI","GPT2")
-        rows_BABI.append(score_BABI(st,f+'/result.json',OOV=False,layer=lay,KB=kb))
-        rows_BABI.append(score_BABI(st+" OOV",f+'/result_OOV.json',OOV=True,layer=lay,KB=kb))
-    
+        rows_BABI.extend(
+            (
+                score_BABI(
+                    st, f'{f}/result.json', OOV=False, layer=lay, KB=kb
+                ),
+                score_BABI(
+                    f"{st} OOV",
+                    f'{f}/result_OOV.json',
+                    OOV=True,
+                    layer=lay,
+                    KB=kb,
+                ),
+            )
+        )
 print(tabulate(rows_BABI,headers="keys",tablefmt='latex',floatfmt=".2f",numalign="center"))

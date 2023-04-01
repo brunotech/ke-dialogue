@@ -24,7 +24,7 @@ model_checkpoint = "runs/SMD_gpt2_graph_False_adj_False_edge_False_unilm_False_f
 for i in range(N_GPU):
     start_ind, end_ind = i * N_SAMPLES_PER_PROCESS, (i+1) * N_SAMPLES_PER_PROCESS # the range is inclusive
     if i == N_GPU-1: end_ind = N_SAMPLES-1
-    command = "python evaluate_finetune.py --dataset SMD --model_checkpoint {} --top_k 1 --eval_indices {},{} --filter_domain {}".format(model_checkpoint, start_ind, end_ind, sys.argv[1])
+    command = f"python evaluate_finetune.py --dataset SMD --model_checkpoint {model_checkpoint} --top_k 1 --eval_indices {start_ind},{end_ind} --filter_domain {sys.argv[1]}"
     experiments.append(command)
     split_list.append((start_ind, end_ind))
 
@@ -46,7 +46,7 @@ def runner(cmd):
 # # Change loop
 Parallel(n_jobs=N_GPU, backend="threading")( delayed(runner)(experiments[i]) for i in tqdm(range(len(experiments))))
 
-path = model_checkpoint + "/result_splits/"
+path = f"{model_checkpoint}/result_splits/"
 if not os.path.exists(path):
     os.makedirs(path)
 
@@ -54,11 +54,11 @@ if not os.path.exists(path):
 all_results = {}
 for t in split_list:
     start_ind, end_ind = t
-    with open(model_checkpoint + "/result_splits/" + str(start_ind) + '_' + str(end_ind) + '.json', 'r') as json_file:
+    with open(f"{model_checkpoint}/result_splits/{str(start_ind)}_{str(end_ind)}.json", 'r') as json_file:
         obj_split = json.load(json_file)
-        all_results.update(obj_split)
+        all_results |= obj_split
 
-with open(model_checkpoint + "/all_results.json", 'w') as outfile:
+with open(f"{model_checkpoint}/all_results.json", 'w') as outfile:
     json.dump(all_results, outfile)
 
-print("total predictions: {} dialogues".format(len(all_results)))
+print(f"total predictions: {len(all_results)} dialogues")

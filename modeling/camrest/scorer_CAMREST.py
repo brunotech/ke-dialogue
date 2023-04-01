@@ -23,9 +23,8 @@ def compute_prf(pred, gold, global_entity_list):
             else:
                 FN += 1
         for p in set(pred):
-            if p in global_entity_list:
-                if p not in gold:
-                    FP += 1
+            if p in global_entity_list and p not in gold:
+                FP += 1
         precision = TP / float(TP+FP) if (TP+FP)!=0 else 0
         recall = TP / float(TP+FN) if (TP+FN)!=0 else 0
         F1 = 2 * precision * recall / float(precision + recall) if (precision+recall)!=0 else 0
@@ -44,8 +43,7 @@ def entityList():
                     glob.add(v.replace(".","").replace(",","").replace(" ","").lower())   
                 else: 
                     glob.add(v.replace(" ","_").lower())
-    glob = list(glob)
-    return glob
+    return list(glob)
 
 def score_MM(model,file_to_score,flattenKB=False):
     genr_json = json.load(open(file_to_score))
@@ -134,7 +132,7 @@ def score_BABI(model,file_to_score,flattenKB=False,kb=0):
         idd = 0
         j = 0
         for line in f:
-            if(line == "\n"):
+            if (line == "\n"):
                 turn_acc += acc_temp
                 if(all(ele == 1 for ele in acc_temp)):
                     dial_acc.append(1)
@@ -147,7 +145,7 @@ def score_BABI(model,file_to_score,flattenKB=False,kb=0):
                 _, line = line.replace("\n","").split(' ', 1)
                 if ("\t" in line):
                     _, syst = line.split("\t")
-                    if("i'm on it" not in syst and "api_call" not in syst and "ok let me look into some options for you" not in syst):
+                    if ("i'm on it" not in syst and "api_call" not in syst and "ok let me look into some options for you" not in syst):
                         assert genr_json[str(idd)][j]["spk"] == "SYS"
                         gold_ent = get_entity(global_ent, syst.strip().lower().replace(".",""))
                         pred = genr_json[str(idd)][j]['text'].strip().lower().replace("."," .").replace("'"," '").replace("?"," ?").replace(","," ,").replace("!"," !").replace("  "," ").split(" ")
@@ -157,7 +155,7 @@ def score_BABI(model,file_to_score,flattenKB=False,kb=0):
                             F1_score.append(F1)
                         GOLD.append(syst.strip().lower())
                         GENR.append(genr_json[str(idd)][j]['text'].strip().lower().replace("."," .").replace("'"," '").replace("?"," ?").replace(","," ,").replace("!"," !").replace("  "," "))
-                        
+
                         uGOLD.append(re.sub(r' +', ' ', syst))
                         uGENR.append(re.sub(r' +', ' ', genr_json[str(idd)][j]['text'].strip().lower().replace("."," .").replace("'"," '").replace("?"," ?").replace(","," ,").replace("!"," !").replace("  "," ")))
 
@@ -166,9 +164,7 @@ def score_BABI(model,file_to_score,flattenKB=False,kb=0):
                         else:
                             acc_temp.append(0)
                         j += 1
-                    else:
-                        if(flattenKB): j += 1
-
+                    elif flattenKB: j += 1
     BLEU = moses_multi_bleu(np.array(GENR),np.array(GOLD))
     BERTScore = huggingface_bertscore(uGENR, uGOLD,lang="en",model_type="bert-base-uncased",num_layers=9,batch_size=1)
     BLEURT = google_bleurt(GENR,GOLD)
@@ -184,17 +180,13 @@ def score_BABI(model,file_to_score,flattenKB=False,kb=0):
             }
 
 def get_entity(KB, sentence):
-    list_entity = []
-    for key in sentence.split(' '):
-        if(key in KB):
-            list_entity.append(key)
-    return list_entity
+    return [key for key in sentence.split(' ') if (key in KB)]
 
 rows_BABI = []
 
 for f in glob.glob("runs/*"):
     print(f)
-    if("CAMREST" in f and os.path.isfile(f+'/result.json')):
+    if "CAMREST" in f and os.path.isfile(f'{f}/result.json'):
         params = f.split("/")[1].split("_")
 
         balance_sampler = False
@@ -209,13 +201,7 @@ for f in glob.glob("runs/*"):
         if(eval(edge)): st+= "+EDGES "
         if(eval(unilm)): st+= "+UNI "
         if(eval(flattenKB)): st+= "+REALK "
-        # else:
-            # st+= f"%KB={kb} "
-            # # st+= f"+E{epoch} "
-            # if(int(kb)!= 0):
-            # else:
-            #     kb =0 
-        rows_BABI.append(score_BABI(st,f+'/result.json',eval(flattenKB),kb))
+        rows_BABI.append(score_BABI(st, f'{f}/result.json', eval(flattenKB), kb))
 
 # rows_BABI.append(score_MM("Multi-level memory",'runs/MM/results.json',False))
 # rows_BABI.append(score_KBRet("KBRet",'runs/KBret/pred.txt','runs/KBret/gold.txt',False))

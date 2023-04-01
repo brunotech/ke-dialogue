@@ -22,9 +22,9 @@ set_seed(42)
 
 fin = open("mapping.pair","r")
 replacements = []
-for line in fin.readlines():
+for line in fin:
     tok_from, tok_to = line.replace('\n', '').split('\t')
-    replacements.append((' ' + tok_from + ' ', ' ' + tok_to + ' '))
+    replacements.append((f' {tok_from} ', f' {tok_to} '))
 
 def insertSpace(token, text):
     sidx = 0
@@ -37,10 +37,10 @@ def insertSpace(token, text):
             sidx += 1
             continue
         if text[sidx - 1] != ' ':
-            text = text[:sidx] + ' ' + text[sidx:]
+            text = f'{text[:sidx]} {text[sidx:]}'
             sidx += 1
         if sidx + len(token) < len(text) and text[sidx + len(token)] != ' ':
-            text = text[:sidx + 1] + ' ' + text[sidx + 1:]
+            text = f'{text[:sidx + 1]} {text[sidx + 1:]}'
         sidx += 1
     return text
 
@@ -62,12 +62,10 @@ def normalize(text):
     text = re.sub(r"guest house", "guesthouse", text)
     text = re.sub(r"rosas bed and breakfast", "rosa s bed and breakfast", text)
     text = re.sub(r"el shaddia guesthouse", "el shaddai", text)
-    
-    
 
-    # normalize phone number
-    ms = re.findall('\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4,5})', text)
-    if ms:
+
+
+    if ms := re.findall('\(?(\d{3})\)?[-.\s]?(\d{3})[-.\s]?(\d{4,5})', text):
         sidx = 0
         for m in ms:
             sidx = text.find(m[0], sidx)
@@ -76,10 +74,10 @@ def normalize(text):
             eidx = text.find(m[-1], sidx) + len(m[-1])
             text = text.replace(text[sidx:eidx], ''.join(m))
 
-    # normalize postcode
-    ms = re.findall('([a-z]{1}[\. ]?[a-z]{1}[\. ]?\d{1,2}[, ]+\d{1}[\. ]?[a-z]{1}[\. ]?[a-z]{1}|[a-z]{2}\d{2}[a-z]{2})',
-                    text)
-    if ms:
+    if ms := re.findall(
+        '([a-z]{1}[\. ]?[a-z]{1}[\. ]?\d{1,2}[, ]+\d{1}[\. ]?[a-z]{1}[\. ]?[a-z]{1}|[a-z]{2}\d{2}[a-z]{2})',
+        text,
+    ):
         sidx = 0
         for m in ms:
             sidx = text.find(m, sidx)
@@ -116,7 +114,7 @@ def normalize(text):
     text = re.sub('\'\s', ' ', text)
     text = re.sub('\s\'', ' ', text)
     for fromx, tox in replacements:
-        text = ' ' + text + ' '
+        text = f' {text} '
         text = text.replace(fromx, tox)[1:-1]
 
     # remove multiple spaces
@@ -154,7 +152,7 @@ def substringSieve(string_list):
     string_list.sort(key=lambda s: len(s), reverse=True)
     out = []
     for s in string_list:
-        if not any([s in o for o in out]):
+        if all(s not in o for o in out):
             out.append(s)
     return out
 
@@ -193,29 +191,29 @@ def to_query(domain, dic, reqt):
     return q
 
 def convert_time_int_to_time(all_rows,clmn):#leaveAt_id,arriveBy_id):
-    leaveAt_id = -1
-    arriveBy_id = -1
-    if('leaveAt' in clmn):
-        leaveAt_id = clmn.index('leaveAt')
-    if('arriveBy' in clmn):
-        arriveBy_id = clmn.index('arriveBy')
-    if(leaveAt_id!= -1):
+    leaveAt_id = clmn.index('leaveAt') if ('leaveAt' in clmn) else -1
+    arriveBy_id = clmn.index('arriveBy') if ('arriveBy' in clmn) else -1
+    if (leaveAt_id!= -1):
         for i in range(len(all_rows)):
             all_rows[i] = list(all_rows[i])
             time = all_rows[i][leaveAt_id]
             mins=int(time%60)
             hours=int(time/60)
-            if(len(str(hours)))==1: hours = "0"+str(hours)
-            if(len(str(mins)))==1: mins = "0"+str(mins)
+            if (len(str(hours)))==1:
+                hours = f"0{hours}"
+            if (len(str(mins)))==1:
+                mins = f"0{mins}"
             all_rows[i][leaveAt_id] = str(hours)+str(mins)
-    if(arriveBy_id!= -1):
+    if (arriveBy_id!= -1):
         for i in range(len(all_rows)):
             all_rows[i] = list(all_rows[i])
             time = all_rows[i][arriveBy_id]
             mins=int(time%60)
             hours=int(time/60)
-            if(len(str(hours)))==1: hours = "0"+str(hours)
-            if(len(str(mins)))==1: mins = "0"+str(mins)
+            if (len(str(hours)))==1:
+                hours = f"0{hours}"
+            if (len(str(mins)))==1:
+                mins = f"0{mins}"
             all_rows[i][arriveBy_id] = str(hours)+str(mins)
     return all_rows
 
@@ -226,9 +224,12 @@ def parse_results(dic_data,semi,domain):
             if k in ["leaveAt","destination","departure","arriveBy"]:
                 book_query += f" {k} = '{normalize(t)}'"
 
-    if(domain == "hotel"):
-        if dic_data["day"]== "" or dic_data["stay"]== "" or dic_data["people"]== "":
-            return None,None
+    if (domain == "hotel") and (
+        dic_data["day"] == ""
+        or dic_data["stay"] == ""
+        or dic_data["people"] == ""
+    ):
+        return None,None
     results = None
     if(len(dic_data['booked'])>0):
         if(domain == "train" and 'trainID' in dic_data['booked'][0]):
@@ -249,10 +250,18 @@ def parse_results(dic_data,semi,domain):
     return book_query, results
 
 def get_booking_query(text):
-    domain = {"global":set(),"train":[],"attraction":[],"hotel":[],"restaurant":[],"taxi":[],
-              "police":[],"hospital":[],"generic":[]}
-    domain[text.split()[0]] = re.findall(r"'(.*?)'", text)
-    return domain
+    return {
+        "global": set(),
+        "train": [],
+        "attraction": [],
+        "hotel": [],
+        "restaurant": [],
+        "taxi": [],
+        "police": [],
+        "hospital": [],
+        "generic": [],
+        text.split()[0]: re.findall(r"'(.*?)'", text),
+    }
 
 def get_name(conv,dict_delex):
     for conv_turn in reversed(conv):
@@ -268,8 +277,8 @@ def get_start_end_ACT(ACT):
     dic = {}
     mapper = {"one":1,"two":2,"three":3,"3-star":3,"four":4,"five":5}
     for span in ACT:
-        if(span[1]=="Stars"):
-            if(span[2] in mapper.keys()):
+        if (span[1]=="Stars"):
+            if span[2] in mapper:
                 dic[mapper[span[2]]] = [span[3],span[4]]
             else:
                 dic[span[2]] = [span[3],span[4]]
@@ -303,14 +312,13 @@ def check_metadata(dic, state):
 # was called delex
 def delexer(turns,dictionary,entity_info):
     text_delex = normalize(turns['text'])
-    
+
     for k, v in turns['dialog_act'].items():
         for [act, val] in v: # key: dialog act, val: entitie(s)
-            if (act not in ["none"] and val not in ["-", "?"]):
-                if(act=="Choice" and val == "79"):
-                    pass
-                else:
-                    dictionary[act.lower()].append(normalize(val))    
+            if (act not in ["none"] and val not in ["-", "?"]) and (
+                act != "Choice" or val != "79"
+            ):
+                dictionary[act.lower()].append(normalize(val))
     for k,v in entity_info.items():
         if(v not in ["-", "?"]  and normalize(v) in text_delex):
 
@@ -340,8 +348,6 @@ def get_attraction_name(conv, dict_delex):
             for ids_v, v in enumerate(r_delex_dictionary["name"]):
                 if(v in conv_turn["text"]):
                     return v, ids_v
-                if(v in conv_turn["text"]):
-                    return v, ids_v
     return None, None
 
 # 0|location||0||0
@@ -367,7 +373,6 @@ def generate_all_query(dict_delex,info):
     contrains = [[None],[None]]
     query_template = {}
     results = {}
-    mapper_contrains = {0:"area",1:"type"}
     if("area" in dict_delex):
         contrains[0] = all_area
         query_template["area"] = ""
@@ -386,7 +391,7 @@ def generate_all_query(dict_delex,info):
     if("fee" in dict_delex):
         results["entrance fee"] = ""
     lexicalized = []
-    if(all([1 if v[0]==None else 0 for v in contrains])):
+    if all(1 if v[0] is None else 0 for v in contrains):
         for n in all_name:
             query = {"name":n}
             clmn = ["address","area","name","phone","postcode","entrance fee","type"]
@@ -395,14 +400,15 @@ def generate_all_query(dict_delex,info):
             if("entrance fee" in results and row[clmn.index('entrance fee')] == "?"):
                 continue
             choice = "1"
-            if(row[2]!= dict_delex["name"]):
+            if (row[2]!= dict_delex["name"]):
                 result = results.copy()
-                for k in results.keys():
+                for k in results:
                     result[k] = row[clmn.index(k)]
                 if("choice" in dict_delex):
                     result["choice"] = choice
                 lexicalized.append(result)
     else:
+        mapper_contrains = {0:"area",1:"type"}
         for combo in product(*contrains):
             query = query_template.copy()
 
@@ -413,13 +419,13 @@ def generate_all_query(dict_delex,info):
             database.execute(to_query("attraction", query, clmn))
             all_rows = database.fetchall()
             choice = str(len(all_rows))
-            if(len(all_rows)>0):
+            if (len(all_rows)>0):
                 for row in all_rows:
                     if("entrance fee" in results and row[clmn.index('entrance fee')] == "?"):
                         continue
-                    if(row[2]!= dict_delex["name"]):
+                    if (row[2]!= dict_delex["name"]):
                         result = results.copy()
-                        for k in results.keys():
+                        for k in results:
                             result[k] = row[clmn.index(k)]
                         if("choice" in dict_delex):
                             result["choice"] = choice
@@ -438,7 +444,7 @@ good = 0
 cnt_single_entity_templates = []
 data = []
 for k, dial in train.items():
-    if(k.lower() in split_by_single_and_domain["attraction_single"]):
+    if (k.lower() in split_by_single_and_domain["attraction_single"]):
         id_dialogue = k.lower()
         goal = dial["goal"]["attraction"]
         # pp.pprint(goal)
@@ -481,13 +487,13 @@ for k, dial in train.items():
             # print(key, list(set(substringSieve(d))))
         al += 1
 
-        if(not all([1 if v==1 else 0 for k,v in len_r_dict.items()])):
+        if not all(1 if v == 1 else 0 for k, v in len_r_dict.items()):
             continue
 
         name_attraction, idx_attraction = get_name(conversation,r_delex_dictionary)
-        if(name_attraction == None):
+        if name_attraction is None:
             continue
-        
+
         lexicalized = generate_all_query(r_delex_dictionary, goal['info'])
         # for l in lexicalized:
         #     print(l)
@@ -498,20 +504,20 @@ for k, dial in train.items():
             text_rdelex = conv_turn["text"]
             if conv_turn["spk"] in ["USR","SYS"]:
 
-                if "name" in r_delex_dictionary.keys():
+                if "name" in r_delex_dictionary:
                     for ids_v, v in enumerate(r_delex_dictionary["name"]):
                         text_rdelex = text_rdelex.replace(v,f"[name_{ids_v}]")
                         text_rdelex = text_rdelex.replace(v.replace("the ",""),f"[name_{ids_v}]")
-                if "type" in r_delex_dictionary.keys():
+                if "type" in r_delex_dictionary:
                     for ids_v, v in enumerate(r_delex_dictionary["type"]):
                         if(v == "nightclubs"): v = "nightclub"
                         if(v == "museums"): v = "museum"
                         if(v == "cinemas"): v = "cinema"
                         if(v == "kings hedges learner pools"): v = "kings hedges learner pool"
-                        
+
                         text_rdelex = text_rdelex.replace(v,f"[type_{ids_v}]")
                         text_rdelex = text_rdelex.replace(v.replace("the ",""),f"[type_{ids_v}]")
-                if "choice" in r_delex_dictionary.keys():
+                if "choice" in r_delex_dictionary:
                     numbers = [str(s) for s in text_rdelex.split() if s.isdigit()]
                     for ids_v, v in enumerate(r_delex_dictionary["choice"]):
                         if (v in numbers):
@@ -521,11 +527,11 @@ for k, dial in train.items():
                     if(ty not in ["name","choice"]):
                         for ids_v, v in enumerate(sorted(val, reverse=True, key=lambda item: len(item))):
                             text_rdelex = text_rdelex.replace(v,f"[{ty}_{ids_v}]")
-    
+
                 # all_name
-                if("cambridge towninfo centre" not in text_rdelex and "towninfo centre" not in text_rdelex and "cambridge" not in text_rdelex):
+                if ("cambridge towninfo centre" not in text_rdelex and "towninfo centre" not in text_rdelex and "cambridge" not in text_rdelex):
                     for area in all_area:
-                        if(" "+area in text_rdelex):
+                        if f" {area}" in text_rdelex:
                             flag = False
                             continue
 
@@ -542,24 +548,21 @@ for k, dial in train.items():
                             if(typ.replace("mutliple","") in text_rdelex):
                                 flag = False
                                 continue
-                             
-                rdelex_conv.append({"spk":conv_turn["spk"],"text":conv_turn["text"],"text_rdelex":text_rdelex})
+
             elif conv_turn["spk"] in ["SYS-API"]:
-                if "name" in r_delex_dictionary.keys():
+                if "name" in r_delex_dictionary:
                     for ids_v, v in enumerate(r_delex_dictionary["name"]):
                         text_rdelex = text_rdelex.replace(v,f"[name_{ids_v}]")
                         text_rdelex = text_rdelex.replace(v.replace("the ",""),f"[name_{ids_v}]")
-                rdelex_conv.append({"spk":conv_turn["spk"],"text":conv_turn["text"],"text_rdelex":text_rdelex})
-            else:
-                rdelex_conv.append({"spk":conv_turn["spk"],"text":conv_turn["text"],"text_rdelex":text_rdelex})
+            rdelex_conv.append({"spk":conv_turn["spk"],"text":conv_turn["text"],"text_rdelex":text_rdelex})
         if(flag):
             data.append({"id":id_dialogue,"conv":rdelex_conv, "lexer":lexicalized, "dict_original":r_delex_dictionary})
-        # for conv_turn in rdelex_conv:
-        #     print(f"{conv_turn['spk']} >>> {conv_turn['text_rdelex']}")
-        # # input()
-        # print()
-        # print()
-        # print()
+            # for conv_turn in rdelex_conv:
+            #     print(f"{conv_turn['spk']} >>> {conv_turn['text_rdelex']}")
+            # # input()
+            # print()
+            # print()
+            # print()
 with open('MultiWOZ_2.1/ATTR_SINGLE_TEMPLATE.json', 'w') as fp:
     json.dump(data, fp, indent=4)
 print(len(data))

@@ -70,7 +70,6 @@ def moses_multi_bleu(hypotheses, references, lowercase=False):
     reference_file.flush()
 
 
-     # Calculate BLEU using multi-bleu script
     with open(hypothesis_file.name, "r") as read_pred:
         bleu_cmd = [multi_bleu_path]
         if lowercase:
@@ -79,7 +78,7 @@ def moses_multi_bleu(hypotheses, references, lowercase=False):
         try:
             bleu_out = subprocess.check_output(bleu_cmd, stdin=read_pred, stderr=subprocess.STDOUT)
             bleu_out = bleu_out.decode("utf-8")
-            bleu_score = re.search(r"BLEU = (.+?),", bleu_out).group(1)
+            bleu_score = re.search(r"BLEU = (.+?),", bleu_out)[1]
             bleu_score = float(bleu_score)
         except subprocess.CalledProcessError as error:
             if error.output is not None:
@@ -96,19 +95,16 @@ def moses_multi_bleu(hypotheses, references, lowercase=False):
 
 
 def _get_ngrams(n, text):
-  """Calcualtes n-grams.
+    """Calcualtes n-grams.
   Args:
     n: which n-grams to calculate
     text: An array of tokens
   Returns:
     A set of n-grams
   """
-  ngram_set = set()
-  text_length = len(text)
-  max_index_ngram_start = text_length - n
-  for i in range(max_index_ngram_start + 1):
-    ngram_set.add(tuple(text[i:i + n]))
-  return ngram_set
+    text_length = len(text)
+    max_index_ngram_start = text_length - n
+    return {tuple(text[i:i + n]) for i in range(max_index_ngram_start + 1)}
 
 
 def _split_into_words(sentences):
@@ -143,7 +139,7 @@ def _len_lcs(x, y):
 
 
 def _lcs(x, y):
-  """
+    """
   Computes the length of the longest common subsequence (lcs) between two
   strings. The implementation below uses a DP programming algorithm and runs
   in O(nm) time where n = len(x) and m = len(y).
@@ -154,17 +150,16 @@ def _lcs(x, y):
   Returns:
     Table of dictionary of coord and len lcs
   """
-  n, m = len(x), len(y)
-  table = dict()
-  for i in range(n + 1):
-    for j in range(m + 1):
-      if i == 0 or j == 0:
-        table[i, j] = 0
-      elif x[i - 1] == y[j - 1]:
-        table[i, j] = table[i - 1, j - 1] + 1
-      else:
-        table[i, j] = max(table[i - 1, j], table[i, j - 1])
-  return table
+    n, m = len(x), len(y)
+    table = {}
+    for i, j in itertools.product(range(n + 1), range(m + 1)):
+        if i == 0 or j == 0:
+          table[i, j] = 0
+        elif x[i - 1] == y[j - 1]:
+          table[i, j] = table[i - 1, j - 1] + 1
+        else:
+          table[i, j] = max(table[i - 1, j], table[i, j - 1])
+    return table
 
 
 def _recon_lcs(x, y):
@@ -196,7 +191,7 @@ def _recon_lcs(x, y):
 
 
 def rouge_n(evaluated_sentences, reference_sentences, n=2):
-  """
+    """
   Computes ROUGE-N of two text collections of sentences.
   Sourece: http://research.microsoft.com/en-us/um/people/cyl/download/
   papers/rouge-working-note-v1.3.1.pdf
@@ -209,33 +204,29 @@ def rouge_n(evaluated_sentences, reference_sentences, n=2):
   Raises:
     ValueError: raises exception if a param has len <= 0
   """
-  if len(evaluated_sentences) <= 0 or len(reference_sentences) <= 0:
-    raise ValueError("Collections must contain at least 1 sentence.")
+    if len(evaluated_sentences) <= 0 or len(reference_sentences) <= 0:
+      raise ValueError("Collections must contain at least 1 sentence.")
 
-  evaluated_ngrams = _get_word_ngrams(n, evaluated_sentences)
-  reference_ngrams = _get_word_ngrams(n, reference_sentences)
-  reference_count = len(reference_ngrams)
-  evaluated_count = len(evaluated_ngrams)
+    evaluated_ngrams = _get_word_ngrams(n, evaluated_sentences)
+    reference_ngrams = _get_word_ngrams(n, reference_sentences)
+    reference_count = len(reference_ngrams)
+    evaluated_count = len(evaluated_ngrams)
 
-  # Gets the overlapping ngrams between evaluated and reference
-  overlapping_ngrams = evaluated_ngrams.intersection(reference_ngrams)
-  overlapping_count = len(overlapping_ngrams)
+    # Gets the overlapping ngrams between evaluated and reference
+    overlapping_ngrams = evaluated_ngrams.intersection(reference_ngrams)
+    overlapping_count = len(overlapping_ngrams)
 
-  # Handle edge case. This isn't mathematically correct, but it's good enough
-  if evaluated_count == 0:
-    precision = 0.0
-  else:
-    precision = overlapping_count / evaluated_count
+    # Handle edge case. This isn't mathematically correct, but it's good enough
+    if evaluated_count == 0:
+      precision = 0.0
+    else:
+      precision = overlapping_count / evaluated_count
 
-  if reference_count == 0:
-    recall = 0.0
-  else:
-    recall = overlapping_count / reference_count
+    recall = 0.0 if reference_count == 0 else overlapping_count / reference_count
+    f1_score = 2.0 * ((precision * recall) / (precision + recall + 1e-8))
 
-  f1_score = 2.0 * ((precision * recall) / (precision + recall + 1e-8))
-
-  # return overlapping_count / reference_count
-  return f1_score, precision, recall
+    # return overlapping_count / reference_count
+    return f1_score, precision, recall
 
 
 def _f_p_r_lcs(llcs, m, n):
@@ -292,7 +283,7 @@ def rouge_l_sentence_level(evaluated_sentences, reference_sentences):
 
 
 def _union_lcs(evaluated_sentences, reference_sentence):
-  """
+    """
   Returns LCS_u(r_i, C) which is the LCS score of the union longest common
   subsequence between reference sentence ri and candidate summary C. For example
   if r_i= w1 w2 w3 w4 w5, and C contains two sentences: c1 = w1 w2 w6 w7 w8 and
@@ -308,25 +299,24 @@ def _union_lcs(evaluated_sentences, reference_sentence):
   ValueError:
     Raises exception if a param has len <= 0
   """
-  if len(evaluated_sentences) <= 0:
-    raise ValueError("Collections must contain at least 1 sentence.")
+    if len(evaluated_sentences) <= 0:
+      raise ValueError("Collections must contain at least 1 sentence.")
 
-  lcs_union = set()
-  reference_words = _split_into_words([reference_sentence])
-  combined_lcs_length = 0
-  for eval_s in evaluated_sentences:
-    evaluated_words = _split_into_words([eval_s])
-    lcs = set(_recon_lcs(reference_words, evaluated_words))
-    combined_lcs_length += len(lcs)
-    lcs_union = lcs_union.union(lcs)
+    lcs_union = set()
+    reference_words = _split_into_words([reference_sentence])
+    combined_lcs_length = 0
+    for eval_s in evaluated_sentences:
+      evaluated_words = _split_into_words([eval_s])
+      lcs = set(_recon_lcs(reference_words, evaluated_words))
+      combined_lcs_length += len(lcs)
+      lcs_union = lcs_union.union(lcs)
 
-  union_lcs_count = len(lcs_union)
-  union_lcs_value = union_lcs_count / combined_lcs_length
-  return union_lcs_value
+    union_lcs_count = len(lcs_union)
+    return union_lcs_count / combined_lcs_length
 
 
 def rouge_l_summary_level(evaluated_sentences, reference_sentences):
-  """
+    """
   Computes ROUGE-L (summary level) of two text collections of sentences.
   http://research.microsoft.com/en-us/um/people/cyl/download/papers/
   rouge-working-note-v1.3.1.pdf
@@ -348,20 +338,19 @@ def rouge_l_summary_level(evaluated_sentences, reference_sentences):
   Raises:
     ValueError: raises exception if a param has len <= 0
   """
-  if len(evaluated_sentences) <= 0 or len(reference_sentences) <= 0:
-    raise ValueError("Collections must contain at least 1 sentence.")
+    if len(evaluated_sentences) <= 0 or len(reference_sentences) <= 0:
+      raise ValueError("Collections must contain at least 1 sentence.")
 
-  # total number of words in reference sentences
-  m = len(_split_into_words(reference_sentences))
+    # total number of words in reference sentences
+    m = len(_split_into_words(reference_sentences))
 
-  # total number of words in evaluated sentences
-  n = len(_split_into_words(evaluated_sentences))
+    # total number of words in evaluated sentences
+    n = len(_split_into_words(evaluated_sentences))
 
-  union_lcs_sum_across_all_references = 0
-  for ref_s in reference_sentences:
-    union_lcs_sum_across_all_references += _union_lcs(evaluated_sentences,
-                                                      ref_s)
-  return _f_p_r_lcs(union_lcs_sum_across_all_references, m, n)
+    union_lcs_sum_across_all_references = sum(
+        _union_lcs(evaluated_sentences, ref_s) for ref_s in reference_sentences
+    )
+    return _f_p_r_lcs(union_lcs_sum_across_all_references, m, n)
 
 
 def rouge(hypotheses, references):
@@ -408,10 +397,7 @@ def rouge(hypotheses, references):
 def compute_exact_match(pred,gold):
     pred = sorted(pred)
     gold = sorted(gold)
-    if(" ".join(pred) == " ".join(gold)):
-        return 1
-    else:
-        return 0
+    return 1 if (" ".join(pred) == " ".join(gold)) else 0
 
 def hasNoNumbers(inputString):
   return not any(char.isdigit() for char in inputString)
@@ -428,7 +414,7 @@ def substringSieve(string_list):
     string_list.sort(key=lambda s: len(s), reverse=True)
     out = []
     for s in string_list:
-        if not any([s in o for o in out]):
+        if all(s not in o for o in out):
             out.append(s)
     return out
 
@@ -440,17 +426,21 @@ def compute_prf(pred, gold, global_entity_list, local_kb_word):
                 TP += 1
             else:
                 FN += 1
-        list_FP = []
-        for e in list(set(global_entity_list+list(local_kb_word))):
-          if e.lower() in pred.lower() and checker_global_ent(e,gold):
-            list_FP.append(e)
+        list_FP = [
+            e
+            for e in list(set(global_entity_list + list(local_kb_word)))
+            if e.lower() in pred.lower() and checker_global_ent(e, gold)
+        ]
         FP = len(list(set(substringSieve(list_FP))))
         precision = TP / float(TP+FP) if (TP+FP)!=0 else 0
         recall = TP / float(TP+FN) if (TP+FN)!=0 else 0
-        F1 = 2 * precision * recall / float(precision + recall) if (precision+recall)!=0 else 0
+        return (
+            2 * precision * recall / float(precision + recall)
+            if (precision + recall) != 0
+            else 0
+        )
     else:
-        F1 = None
-    return F1
+        return None
 
 def compute_prf_SMD(pred, gold, global_entity_list, local_kb_word):
     TP, FP, FN = 0, 0, 0
@@ -460,17 +450,21 @@ def compute_prf_SMD(pred, gold, global_entity_list, local_kb_word):
                 TP += 1
             else:
                 FN += 1
-        list_FP = []
-        for e in list(set(global_entity_list+list(local_kb_word))):
-          if e.lower() in pred.lower():
-            list_FP.append(e)
+        list_FP = [
+            e
+            for e in list(set(global_entity_list + list(local_kb_word)))
+            if e.lower() in pred.lower()
+        ]
         FP = len(list(set(substringSieve(list_FP))))
         precision = TP / float(TP+FP) if (TP+FP)!=0 else 0
         recall = TP / float(TP+FN) if (TP+FN)!=0 else 0
-        F1 = 2 * precision * recall / float(precision + recall) if (precision+recall)!=0 else 0
+        return (
+            2 * precision * recall / float(precision + recall)
+            if (precision + recall) != 0
+            else 0
+        )
     else:
-        F1 = None
-    return F1
+        return None
 
 
 def get_global_entity_KVR():
@@ -500,11 +494,9 @@ def get_global_entity_MWOZ():
   return global_entity_list
 
 def get_global_entity_DIALKG():
-  with open('data/opendialkg/data/opendialkg_entities.txt') as f:
-    global_entity_list = []
-    for x in f:
-      global_entity_list.append(x.replace("\n",""))
-  return list(set(global_entity_list))
+    with open('data/opendialkg/data/opendialkg_entities.txt') as f:
+        global_entity_list = [x.replace("\n","") for x in f]
+    return list(set(global_entity_list))
 
 # DON'T FUCKING WASTE GPU MEMORY IF IT IS NOT NEEDED!!!!
 # try:

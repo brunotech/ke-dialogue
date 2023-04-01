@@ -21,7 +21,7 @@ for num_template in [25, 50, 100]:
 
             count = 0
             for sample in data:
-                count += 1 
+                count += 1
                 if count > num_template and domain != "restaurant":
                     break
                 if count > num_template * 2 and domain == "restaurant":
@@ -43,8 +43,8 @@ for num_template in [25, 50, 100]:
                             if "text_original" not in turn:
                                 turn["text_original"] = turn["text"]
                                 turn["text"] = turn["text_rdelex"]
-                            
-                            turn["text"] = turn["text"].replace("[" + map_attr(attr) + "_0]", opt[attr])
+
+                            turn["text"] = turn["text"].replace(f"[{map_attr(attr)}_0]", opt[attr])
                             new_turns[i] = turn
                     for i in range(len(new_turns)):
                         turn = new_turns[i]

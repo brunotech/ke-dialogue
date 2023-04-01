@@ -25,7 +25,7 @@ def substringSieve(string_list):
     string_list.sort(key=lambda s: len(s), reverse=True)
     out = []
     for s in string_list:
-        if not any([s.lower() in o.lower() for o in out]):
+        if all(s.lower() not in o.lower() for o in out):
             out.append(s)
     return out
 
@@ -58,11 +58,12 @@ def compute_prf(gold, pred, global_entity_list):#, kb_plain=None):
             if g in pred:
                 TP += 1
             else:
-                FN += 1        
-        list_FP = []
-        for e in get_match_ent(pred,global_entity_list):
-            if(e not in gold):
-                list_FP.append(e)
+                FN += 1
+        list_FP = [
+            e
+            for e in get_match_ent(pred, global_entity_list)
+            if (e not in gold)
+        ]
         FP = len(list(set(substringSieve(list_FP))))
         precision = TP / float(TP+FP) if (TP+FP)!=0 else 0
         recall = TP / float(TP+FN) if (TP+FN)!=0 else 0
@@ -92,26 +93,19 @@ def compute_prf_prec(gold, pred, global_entity_list):#, kb_plain=None):
 
 def get_global_entity_DIALKG():
     with open('data/opendialkg/opendialkg_entities.txt') as f:
-        global_entity_list = []
-        for x in f:
-            global_entity_list.append(x.replace("\n",""))
+        global_entity_list = [x.replace("\n","") for x in f]
     return list(set(global_entity_list))
 
 def get_unique_entities(data_split, eval_from_graph=False):
     entities = set()
     for dialogue in tqdm(data_split):
         for d in dialogue:
-            if eval_from_graph:
-                if 'gold_entities' in d:
-                    for e in d['gold_entities']:
-                        entities.add(e)
-                else:
-                    for e in d['entities']:
-                        entities.add(e)
+            if eval_from_graph and 'gold_entities' in d:
+                for e in d['gold_entities']:
+                    entities.add(e)
             else:
                 for e in d['entities']:
                     entities.add(e)
-
     # Filter out common entities
     entities = list(filter(lambda x: x.isnumeric() or len(x) >= 5, entities))
     entities = list(filter(lambda x: x.lower()!= 'author', entities))
@@ -123,22 +117,14 @@ def get_unique_entities(data_split, eval_from_graph=False):
     entities = list(filter(lambda x: x.lower()!= 'review', entities))
     entities = list(filter(lambda x: x.lower()!= 'check it out', entities))
     entities = list(filter(lambda x: x.lower()!= 'for you', entities))
-    
+
     return entities
 
 def score_DIALKG(model,file_to_score, test_json, global_entity_list, oov_ent_test, eval_from_graph=False, eval_prec=False):
     genr_json = json.load(open(file_to_score))
-    
-    if eval_from_graph:
-        entity_key = 'gold_entities'
-    else:
-        entity_key = 'entities'
-        
-    if eval_prec:
-        metric_fn = compute_prf_prec
-    else:
-        metric_fn = compute_prf
-        
+
+    entity_key = 'gold_entities' if eval_from_graph else 'entities'
+    metric_fn = compute_prf_prec if eval_prec else compute_prf
     GOLD, GENR = [], []
     F1_score = []
     OOV_F1_score = []
@@ -146,16 +132,12 @@ def score_DIALKG(model,file_to_score, test_json, global_entity_list, oov_ent_tes
 #     for idx_d, dial in enumerate(test_json):
         idx_t = 0
         for d in dial:
-            if(d['speaker']=="assistant"):
+            if (d['speaker']=="assistant"):
                 GOLD.append(d["text"].lower())
                 GENR.append(genr_json[str(idx_d)][idx_t]["text"].lower())
                 if entity_key in d:
                     gold_entities = [ent.lower() for ent in d[entity_key]]
-                    oov_gold_entities = []
-                    for gold in gold_entities:
-                        if gold in oov_ent_test:
-                            oov_gold_entities.append(gold)
-
+                    oov_gold_entities = [gold for gold in gold_entities if gold in oov_ent_test]
                     # Calculate F1
                     F1, count = metric_fn(gold_entities, GENR[-1], global_entity_list)
                     if(count==1): 
